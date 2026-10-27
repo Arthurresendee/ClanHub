@@ -1,0 +1,105 @@
+@page "/app/{Ws:guid}/cla/{Id:guid}/guerra-de-clas"
+@implements IDisposable
+@inject ApiClient Api
+@inject IJSRuntime Js
+<PageTitle>Guerra de Clãs — ClanHub</PageTitle>
+
+@if (_error is not null) { <MudAlert Severity="Severity.Error">@_error</MudAlert> }
+else if (!_loaded) { <MudProgressLinear Indeterminate="true" /> }
+else
+{
+    @if (_race is null)
+    {
+        <MudAlert Severity="Severity.Info">Sem dados da semana ainda. A primeira sincronização preenche esta tela.</MudAlert>
+    }
+    else
+    {
+        <MudPaper Class="pa-4 mb-4">
+            <MudText Typo="Typo.h5">Semana atual</MudText>
+            <MudText Typo="Typo.h4">@_race.Fame de fama · @(_race.Rank)º lugar</MudText>
+            <MudText Typo="Typo.caption">atualizado @Format.Ago(_race.UpdatedAt)</MudText>
+        </MudPaper>
+
+        <MudText Typo="Typo.h6" GutterBottom="true">Ainda sem os 4 decks hoje (@Pending.Count)</MudText>
+        @if (Pending.Count == 0) { <MudAlert Severity="Severity.Success">Todo mundo já jogou os decks de hoje.</MudAlert> }
+        else
+        {
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-4">
+                @foreach (var p in Pending)
+                {
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small">@p.Name (@p.DecksUsedToday/4)</MudChip>
+                }
+            </MudStack>
+        }
+
+        <div class="table-scroll">
+            <MudSimpleTable Dense="true" Hover="true">
+                <thead><tr><th>Jogador</th><th>Fama</th><th>Decks (semana)</th><th>Decks (hoje)</th></tr></thead>
+                <tbody>
+                @foreach (var p in _race.Participants)
+                {
+                    <tr><td>@p.Name</td><td>@p.Fame</td><td>@p.DecksUsed</td><td>@p.DecksUsedToday/4</td></tr>
+                }
+                </tbody>
+            </MudSimpleTable>
+        </div>
+    }
+
+    @if (_stats is { Count: > 0 })
+    {
+        <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Média das últimas semanas</MudText>
+        <div class="table-scroll">
+            <MudSimpleTable Dense="true" Hover="true">
+                <thead><tr><th>Jogador</th><th>Semanas</th><th>Fama média</th><th>Decks</th></tr></thead>
+                <tbody>
+                @foreach (var s in _stats)
+                {
+                    <tr><td>@s.Name</td><td>@s.Weeks</td><td>@s.AverageFame</td><td>@s.TotalDecks</td></tr>
+                }
+                </tbody>
+            </MudSimpleTable>
+        </div>
+    }
+
+    @if (_history is { Count: > 0 })
+    {
+        <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Semanas anteriores</MudText>
+        @foreach (var h in _history)
+        {
+            <MudText>Temporada @h.SeasonId · semana @(h.SectionIndex + 1) — @h.Fame de fama, @(h.Rank)º lugar</MudText>
+        }
+    }
+}
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+    [Parameter] public Guid Id { get; set; }
+
+    private RiverRaceDto? _race;
+    private List<RiverRaceStatsRowDto>? _stats;
+    private List<RiverRaceDto>? _history;
+    private bool _loaded;
+    private string? _error;
+    private PollingLoop? _poll;
+
+    private List<RiverRaceParticipantDto> Pending =>
+        _race?.Participants.Where(p => p.DecksUsedToday < 4).OrderBy(p => p.DecksUsedToday).ToList() ?? [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+        _stats = (await Api.Get<List<RiverRaceStatsRowDto>>($"/api/v1/clans/{Id}/river-race/stats")).Value;
+        _history = (await Api.Get<Page<RiverRaceDto>>($"/api/v1/clans/{Id}/river-race/history?limit=8")).Value?.Items.ToList();
+        _poll = new PollingLoop(Js, TimeSpan.FromSeconds(20), async () => { await Load(); await InvokeAsync(StateHasChanged); });
+        _poll.Start();
+    }
+
+    private async Task Load()
+    {
+        var r = await Api.Get<RiverRaceDto>($"/api/v1/clans/{Id}/river-race/current");
+        if (r.Ok) { _race = r.Value; _error = null; } else _error = r.Error;
+        _loaded = true;
+    }
+
+    public void Dispose() => _poll?.Dispose();
+}

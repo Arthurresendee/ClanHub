@@ -1,0 +1,93 @@
+@page "/app/{Ws:guid}/cla/{Id:guid}/guerras"
+@inject ApiClient Api
+<PageTitle>Histórico de guerras — ClanHub</PageTitle>
+
+@if (_error is not null) { <MudAlert Severity="Severity.Error">@_error</MudAlert> }
+else if (_wars is null) { <MudProgressLinear Indeterminate="true" /> }
+else
+{
+    @if (_stats is { Count: > 0 })
+    {
+        <MudText Typo="Typo.h6" GutterBottom="true">Desempenho por membro (90 dias)</MudText>
+        <div class="table-scroll mb-4">
+            <MudSimpleTable Dense="true" Hover="true">
+                <thead><tr><th>Jogador</th><th>Guerras</th><th>Ataques usados</th><th>Ataques perdidos</th><th>Estrelas</th><th>% médio</th></tr></thead>
+                <tbody>
+                @foreach (var s in _stats)
+                {
+                    <tr><td>@s.Name</td><td>@s.Wars</td><td>@s.AttacksUsed</td><td>@(s.AttacksMissed > 0 ? s.AttacksMissed : "")</td><td>@s.TotalStars</td><td>@s.AverageDestruction.ToString("0.#")</td></tr>
+                }
+                </tbody>
+            </MudSimpleTable>
+        </div>
+    }
+
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h6">Guerras</MudText>
+        <MudButton Href="@($"/api/v1/clans/{Id}/reports/wars?format=csv")" Target="_blank" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download">CSV</MudButton>
+    </MudStack>
+    @if (_wars.Count == 0)
+    {
+        <MudText>Sem guerras registradas. Se o log de guerra for privado, peça ao líder para torná-lo público.</MudText>
+    }
+    <div class="table-scroll">
+        <MudSimpleTable Dense="true" Hover="true">
+            <thead><tr><th>Fim</th><th>Oponente</th><th>Resultado</th><th>Estrelas</th><th>Destruição</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var w in _wars)
+            {
+                <tr>
+                    <td>@Format.Dt(w.EndTime)</td><td>@w.OpponentName</td><td>@Format.WarResult(w.Result)</td>
+                    <td>@w.Stars × @w.OpponentStars</td>
+                    <td>@w.Destruction.ToString("0.#")% × @w.OpponentDestruction.ToString("0.#")%</td>
+                    <td><MudButton Size="Size.Small" OnClick="() => Open(w)">Detalhes</MudButton></td>
+                </tr>
+            }
+            </tbody>
+        </MudSimpleTable>
+    </div>
+    @if (_next is not null) { <MudButton OnClick="More" Class="mt-2" Variant="Variant.Outlined">Carregar mais</MudButton> }
+
+    @if (_detail is not null)
+    {
+        <MudPaper Class="pa-3 mt-4">
+            <MudText Typo="Typo.h6">vs @_detail.Summary.OpponentName</MudText>
+            @if (_detail.Attacks.Count == 0) { <MudText>Esta guerra veio do histórico e não tem os ataques detalhados.</MudText> }
+            @foreach (var p in _detail.Participants)
+            {
+                var mine = _detail.Attacks.Where(a => a.AttackerTag == p.Tag).ToList();
+                <MudText>@p.MapPosition. @p.Name — @(mine.Count == 0 ? "sem ataques" : string.Join(" · ", mine.Select(a => $"{a.Stars}⭐ {a.Destruction:0}%")))</MudText>
+            }
+        </MudPaper>
+    }
+}
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+    [Parameter] public Guid Id { get; set; }
+
+    private List<WarSummaryDto>? _wars;
+    private List<WarStatsRowDto>? _stats;
+    private WarDetailDto? _detail;
+    private string? _next, _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var r = await Api.Get<Page<WarSummaryDto>>($"/api/v1/clans/{Id}/wars");
+        if (!r.Ok) { _error = r.Error; return; }
+        _wars = r.Value!.Items.ToList();
+        _next = r.Value.NextCursor;
+        _stats = (await Api.Get<List<WarStatsRowDto>>($"/api/v1/clans/{Id}/wars/stats")).Value;
+    }
+
+    private async Task More()
+    {
+        var r = await Api.Get<Page<WarSummaryDto>>($"/api/v1/clans/{Id}/wars?cursor={Uri.EscapeDataString(_next!)}");
+        if (!r.Ok) return;
+        _wars!.AddRange(r.Value!.Items);
+        _next = r.Value.NextCursor;
+    }
+
+    private async Task Open(WarSummaryDto w) =>
+        _detail = (await Api.Get<WarDetailDto>($"/api/v1/wars/{w.Id}")).Value;
+}

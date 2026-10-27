@@ -1,0 +1,42 @@
+@page "/confirmar-email"
+@inject ApiClient Api
+<PageTitle>Confirmar e-mail — ClanHub</PageTitle>
+
+<div class="page" style="max-width:480px">
+    <MudText Typo="Typo.h4" GutterBottom="true">Confirmação de e-mail</MudText>
+    @if (_state == "loading") { <MudProgressLinear Indeterminate="true" /> }
+    else if (_state == "ok")
+    {
+        <MudAlert Severity="Severity.Success">E-mail confirmado! Agora você já pode entrar.</MudAlert>
+        <MudButton Href="/entrar" Class="mt-4" Variant="Variant.Filled" Color="Color.Primary">Entrar</MudButton>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Error">Link inválido ou expirado.</MudAlert>
+        <MudTextField @bind-Value="_email" Label="Seu e-mail" Class="mt-4" />
+        <MudButton OnClick="Resend" Class="mt-2" Variant="Variant.Outlined">Reenviar confirmação</MudButton>
+        @if (_sent) { <MudAlert Severity="Severity.Info" Class="mt-2">Se o e-mail estiver cadastrado, enviamos um novo link.</MudAlert> }
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? UserId { get; set; }
+    [SupplyParameterFromQuery] public string? Code { get; set; }
+
+    private string _state = "loading";
+    private string _email = "";
+    private bool _sent;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrEmpty(UserId) || string.IsNullOrEmpty(Code)) { _state = "error"; return; }
+        var r = await Api.Get<bool>($"/api/auth/confirmEmail?userId={Uri.EscapeDataString(UserId)}&code={Uri.EscapeDataString(Code)}");
+        _state = r.Ok ? "ok" : "error";
+    }
+
+    private async Task Resend()
+    {
+        await Api.PostOk("/api/auth/resendConfirmationEmail", new { email = _email.Trim() });
+        _sent = true;
+    }
+}

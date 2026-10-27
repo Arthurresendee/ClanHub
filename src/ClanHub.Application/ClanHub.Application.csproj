@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\ClanHub.Domain\ClanHub.Domain.csproj" />
+  </ItemGroup>
+</Project>

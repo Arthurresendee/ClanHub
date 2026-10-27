@@ -1,0 +1,26 @@
+# Imagem da API + Blazor para a Vercel (runtime "container"). Contexto de build: raiz do repositório.
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+COPY Directory.Build.props Directory.Packages.props ./
+COPY src/ClanHub.Domain/*.csproj src/ClanHub.Domain/
+COPY src/ClanHub.Application/*.csproj src/ClanHub.Application/
+COPY src/ClanHub.Infrastructure/*.csproj src/ClanHub.Infrastructure/
+COPY src/ClanHub.Supercell/*.csproj src/ClanHub.Supercell/
+COPY src/ClanHub.Sync/*.csproj src/ClanHub.Sync/
+COPY src/ClanHub.Contracts/*.csproj src/ClanHub.Contracts/
+COPY src/ClanHub.ServiceDefaults/*.csproj src/ClanHub.ServiceDefaults/
+COPY src/ClanHub.Client/*.csproj src/ClanHub.Client/
+COPY src/ClanHub.Server/*.csproj src/ClanHub.Server/
+RUN dotnet restore src/ClanHub.Server/ClanHub.Server.csproj
+
+COPY src/ src/
+RUN dotnet publish src/ClanHub.Server/ClanHub.Server.csproj -c Release --no-restore -o /app/publish /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled
+WORKDIR /app
+COPY --from=build /app/publish .
+# Usuário sem privilégios não abre a porta 80: usamos 8080 (Program.cs lê PORT).
+ENV PORT=8080 DOTNET_EnableDiagnostics=0
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "ClanHub.Server.dll"]

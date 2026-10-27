@@ -1,0 +1,175 @@
+@page "/app/conta"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+@inject PasskeyService Passkeys
+<PageTitle>Minha conta — ClanHub</PageTitle>
+
+<div class="page" style="max-width:800px">
+    <MudText Typo="Typo.h4" GutterBottom="true">Minha conta</MudText>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6">Perfil</MudText>
+        <MudText>@Auth.Me?.DisplayName · @Auth.Me?.Email</MudText>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Alterar senha</MudText>
+        <MudTextField @bind-Value="_oldPassword" Label="Senha atual" InputType="InputType.Password" />
+        <MudTextField @bind-Value="_newPassword" Label="Nova senha" InputType="InputType.Password" />
+        <MudButton OnClick="ChangePassword" Class="mt-2" Variant="Variant.Outlined">Salvar senha</MudButton>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Verificação em duas etapas (2FA)</MudText>
+        @if (_twoFactor is null) { <MudProgressLinear Indeterminate="true" /> }
+        else if (_twoFactor.IsTwoFactorEnabled)
+        {
+            <MudAlert Severity="Severity.Success" Class="mb-2">2FA ativado.</MudAlert>
+            <MudButton OnClick="DisableTwoFactor" Variant="Variant.Outlined" Color="Color.Warning">Desativar</MudButton>
+        }
+        else
+        {
+            <MudText Class="mb-2">Cadastre esta chave no seu app autenticador e digite o código gerado:</MudText>
+            <MudText Style="font-family:monospace; word-break:break-all">@_twoFactor.SharedKey</MudText>
+            <MudTextField @bind-Value="_twoFactorCode" Label="Código de 6 dígitos" />
+            <MudButton OnClick="EnableTwoFactor" Class="mt-2" Variant="Variant.Outlined">Ativar 2FA</MudButton>
+        }
+        @if (_recovery is { Length: > 0 })
+        {
+            <MudAlert Severity="Severity.Warning" Class="mt-2">Guarde estes códigos de recuperação: <b>@string.Join(" · ", _recovery)</b></MudAlert>
+        }
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Passkeys</MudText>
+        @if (!_passkeysSupported) { <MudText>Seu navegador não suporta passkeys.</MudText> }
+        else
+        {
+            <MudText Class="mb-2">Entre sem senha, usando biometria ou o bloqueio do aparelho.</MudText>
+            @foreach (var p in _passkeyList)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center">
+                    <MudText>@p.Name · criada @Format.Dt(p.CreatedAt)</MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="() => RemovePasskey(p)" aria-label="Remover passkey" />
+                </MudStack>
+            }
+            <MudStack Row="true" AlignItems="AlignItems.End" Class="mt-2">
+                <MudTextField @bind-Value="_passkeyName" Label="Nome (ex.: Meu celular)" />
+                <MudButton OnClick="AddPasskey" Variant="Variant.Outlined">Adicionar passkey</MudButton>
+            </MudStack>
+        }
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Contas de jogo vinculadas</MudText>
+        @foreach (var p in Auth.Me?.LinkedPlayers ?? [])
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center">
+                <MudText>@GameIds.Label(p.Game) · @p.PlayerTag · verificado @Format.Dt(p.VerifiedAt)</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.LinkOff" Size="Size.Small" OnClick="() => Unlink(p)" aria-label="Desvincular" />
+            </MudStack>
+        }
+        <MudText Typo="Typo.subtitle2" Class="mt-3">Vincular conta do Clash of Clans</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.End">
+            <MudTextField @bind-Value="_playerTag" Label="Tag do jogador" />
+            <MudTextField @bind-Value="_playerToken" Label="Token de API" InputType="InputType.Password" />
+            <MudButton OnClick="Link" Variant="Variant.Outlined">Verificar</MudButton>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.h6" Color="Color.Error" GutterBottom="true">Excluir conta</MudText>
+        <MudText Class="mb-2">Remove seus dados pessoais. Workspaces em que você é o único dono também são encerrados. Não dá para desfazer.</MudText>
+        <MudButton OnClick="DeleteAccount" Variant="Variant.Outlined" Color="Color.Error">Excluir minha conta</MudButton>
+    </MudPaper>
+</div>
+
+@code {
+    private record TwoFactorInfo(string? SharedKey, int RecoveryCodesLeft, bool IsTwoFactorEnabled, bool IsMachineRemembered);
+    private record TwoFactorResponse(string? SharedKey, bool IsTwoFactorEnabled, string[]? RecoveryCodes);
+
+    private string _oldPassword = "", _newPassword = "", _twoFactorCode = "", _playerTag = "", _playerToken = "";
+    private TwoFactorResponse? _twoFactor;
+    private string[]? _recovery;
+
+    private bool _passkeysSupported;
+    private List<PasskeyDto> _passkeyList = [];
+    private string _passkeyName = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTwoFactor();
+        _passkeysSupported = await Passkeys.IsSupportedAsync();
+        await LoadPasskeys();
+    }
+
+    private async Task LoadPasskeys() => _passkeyList = (await Api.Get<List<PasskeyDto>>("/api/auth/passkeys")).Value ?? [];
+
+    private async Task AddPasskey()
+    {
+        var error = await Passkeys.RegisterAsync(string.IsNullOrWhiteSpace(_passkeyName) ? "Minha passkey" : _passkeyName.Trim());
+        Snackbar.Add(error ?? "Passkey adicionada.", error is null ? Severity.Success : Severity.Error);
+        if (error is null) { _passkeyName = ""; await LoadPasskeys(); }
+    }
+
+    private async Task RemovePasskey(PasskeyDto p)
+    {
+        await Api.Delete($"/api/auth/passkeys/{Uri.EscapeDataString(p.Id)}");
+        await LoadPasskeys();
+    }
+
+    private async Task LoadTwoFactor()
+    {
+        var r = await Api.Post<TwoFactorResponse>("/api/auth/manage/2fa", new { });
+        _twoFactor = r.Value;
+    }
+
+    private async Task ChangePassword()
+    {
+        var r = await Api.PostOk("/api/auth/manage/info", new { oldPassword = _oldPassword, newPassword = _newPassword });
+        Snackbar.Add(r.Ok ? "Senha alterada." : (string.IsNullOrWhiteSpace(r.Error) ? "Não foi possível alterar a senha." : r.Error), r.Ok ? Severity.Success : Severity.Error);
+        if (r.Ok) { _oldPassword = _newPassword = ""; }
+    }
+
+    private async Task EnableTwoFactor()
+    {
+        var r = await Api.Post<TwoFactorResponse>("/api/auth/manage/2fa", new { enable = true, twoFactorCode = _twoFactorCode.Trim() });
+        if (r.Ok) { _twoFactor = r.Value; _recovery = r.Value?.RecoveryCodes; Snackbar.Add("2FA ativado.", Severity.Success); }
+        else Snackbar.Add("Código inválido.", Severity.Error);
+    }
+
+    private async Task DisableTwoFactor()
+    {
+        var r = await Api.Post<TwoFactorResponse>("/api/auth/manage/2fa", new { enable = false, resetSharedKey = true });
+        _twoFactor = r.Value;
+        _recovery = null;
+        await LoadTwoFactor();
+    }
+
+    private async Task Link()
+    {
+        var r = await Api.Post<LinkedPlayerDto>("/api/v1/me/players/verify", new VerifyPlayerRequest(GameIds.ClashOfClans, _playerTag, _playerToken));
+        if (r.Ok) { Snackbar.Add("Conta vinculada.", Severity.Success); _playerTag = _playerToken = ""; await Auth.RefreshAsync(); }
+        else Snackbar.Add(r.Error ?? "Erro", Severity.Error);
+    }
+
+    private async Task Unlink(LinkedPlayerDto p)
+    {
+        await Api.Delete($"/api/v1/me/players/{p.Id}");
+        await Auth.RefreshAsync();
+    }
+
+    private async Task DeleteAccount()
+    {
+        var ok = await Dialogs.ShowMessageBoxAsync("Excluir conta", "Tem certeza? Esta ação não pode ser desfeita.", yesText: "Excluir", cancelText: "Cancelar");
+        if (ok != true) return;
+        var r = await Api.Delete("/api/v1/me");
+        if (!r.Ok) { Snackbar.Add(r.Error ?? "Erro", Severity.Error); return; }
+        await Auth.RefreshAsync();
+        Nav.NavigateTo("/");
+    }
+}

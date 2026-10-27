@@ -1,0 +1,38 @@
+@page "/"
+<PageTitle>ClanHub — gestão de clãs</PageTitle>
+
+<div class="page">
+    <MudPaper Class="pa-8 mb-6" Elevation="2">
+        <MudText Typo="Typo.h3" GutterBottom="true">Gerencie seu clã sem planilhas</MudText>
+        <MudText Typo="Typo.h6" Class="mb-4">
+            Painel gratuito para líderes e staff acompanharem membros, guerras e atividade
+            de clãs de Clash of Clans, Clash Royale e Brawl Stars, com dados atualizados automaticamente.
+        </MudText>
+        <AuthorizeView>
+            <Authorized><MudButton Href="/app" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large">Abrir meu painel</MudButton></Authorized>
+            <NotAuthorized>
+                <MudButton Href="/cadastro" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large">Criar conta grátis</MudButton>
+                <MudButton Href="/entrar" Variant="Variant.Outlined" Size="Size.Large" Class="ml-2">Entrar</MudButton>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Style="height:100%"><MudText Typo="Typo.h6">Membros e atividade</MudText>
+                <MudText>Quem entrou, saiu, subiu de cargo ou parou de doar — num feed atualizado a cada 20 segundos.</MudText></MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Style="height:100%"><MudText Typo="Typo.h6">Guerras</MudText>
+                <MudText>Placar ao vivo, ataques pendentes e desempenho por membro nas guerras do Clash of Clans e na Guerra de Clãs do Clash Royale.</MudText></MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4" Style="height:100%"><MudText Typo="Typo.h6">Sua equipe</MudText>
+                <MudText>Convide co-líderes e anciãos com papéis de acesso. Só o líder verificado do clã pode adicioná-lo.</MudText></MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudText Typo="Typo.caption" Class="mt-6" Style="display:block">
+        O ClanHub é gratuito e só lê dados públicos das APIs oficiais: não é possível expulsar, promover ou convidar membros por aqui — essas ações continuam dentro do jogo.
+    </MudText>
+</div>

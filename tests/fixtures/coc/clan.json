@@ -1,0 +1,9 @@
+{
+  "tag": "#2PP", "name": "Clã Teste", "description": "Clã de teste CH-7F3K2", "clanLevel": 12,
+  "badgeUrls": { "small": "https://img/s.png", "medium": "https://img/m.png", "large": "https://img/l.png" },
+  "members": 2, "someFutureField": { "x": 1 },
+  "memberList": [
+    { "tag": "#PPP2", "name": "Líder", "role": "leader", "expLevel": 200, "trophies": 5000, "clanRank": 1, "donations": 300, "donationsReceived": 100, "townHallLevel": 16 },
+    { "tag": "#QQQ2", "name": "Membro", "role": "member", "expLevel": 150, "trophies": 4000, "clanRank": 2, "donations": 10, "donationsReceived": 50, "townHallLevel": 14 }
+  ]
+}

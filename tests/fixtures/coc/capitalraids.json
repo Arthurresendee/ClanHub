@@ -1,0 +1,4 @@
+{ "items": [ { "state": "ended", "startTime": "20251226T070000.000Z", "endTime": "20251229T070000.000Z",
+  "capitalTotalLoot": 120000, "totalAttacks": 80, "enemyDistrictsDestroyed": 20,
+  "members": [ { "tag": "#PPP2", "name": "Líder", "attacks": 5, "attackLimit": 5, "bonusAttackLimit": 1, "capitalResourcesLooted": 9000 },
+               { "tag": "#QQQ2", "name": "Membro", "attacks": 2, "attackLimit": 5, "bonusAttackLimit": 0, "capitalResourcesLooted": 1000 } ] } ] }

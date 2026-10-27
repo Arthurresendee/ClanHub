@@ -1,0 +1,2 @@
+{ "tag": "#CR22", "name": "Royale Clan", "description": "desc", "badgeUrl": "https://img/cr.png", "clanScore": 50000, "members": 1,
+  "memberList": [ { "tag": "#P22", "name": "Rei", "role": "coLeader", "expLevel": 60, "trophies": 9000, "clanRank": 1, "donations": 500, "donationsReceived": 20 } ] }

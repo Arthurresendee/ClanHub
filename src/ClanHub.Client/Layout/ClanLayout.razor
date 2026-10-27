@@ -1,0 +1,131 @@
+@inherits LayoutComponentBase
+@layout MainLayout
+@implements IDisposable
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject NavigationManager Nav
+@inject IStringLocalizer<ClanHub.Client.Resources.Strings> L
+@using System.Text.RegularExpressions
+@using Microsoft.Extensions.Localization
+
+<div class="page">
+    @if (_ctx.Error is not null)
+    {
+        <MudAlert Severity="Severity.Error">@_ctx.Error</MudAlert>
+    }
+    else if (_ctx.Overview is null)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        var clan = _ctx.Overview.Clan;
+        var f = _ctx.Overview.Features;
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2" Spacing="2">
+            @if (!string.IsNullOrEmpty(clan.BadgeUrl))
+            {
+                <ClanBadge Url="@clan.BadgeUrl" Size="56" />
+            }
+            <div>
+                <MudText Typo="Typo.h5">@clan.Name</MudText>
+                <MudText Typo="Typo.caption">@GameIds.Label(clan.Game) · @clan.Tag · atualizado @Format.Ago(clan.LastSyncAt)</MudText>
+            </div>
+        </MudStack>
+        @if (clan.Status != "Active")
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-2">
+                @(clan.Status == "PrivateWarLog"
+                    ? "O log de guerra deste clã é privado. Peça ao líder para torná-lo público nas configurações do jogo."
+                    : "Este clã não foi encontrado no jogo. Confira se a tag continua válida.")
+            </MudAlert>
+        }
+        <div class="table-scroll mb-4">
+            <MudStack Row="true" Spacing="1">
+                <MudButton Href="@Base" Size="Size.Small" Variant="@V("")">@L["TabOverview"]</MudButton>
+                <MudButton Href="@($"{Base}/membros")" Size="Size.Small" Variant="@V("/membros")">@L["TabMembers"]</MudButton>
+                <MudButton Href="@($"{Base}/atividade")" Size="Size.Small" Variant="@V("/atividade")">@L["TabActivity"]</MudButton>
+                @if (f.Wars)
+                {
+                    <MudButton Href="@($"{Base}/guerra")" Size="Size.Small" Variant="@V("/guerra")">@L["TabWar"]</MudButton>
+                    <MudButton Href="@($"{Base}/guerras")" Size="Size.Small" Variant="@V("/guerras")">@L["TabWars"]</MudButton>
+                }
+                @if (f.Cwl)
+                {
+                    <MudButton Href="@($"{Base}/cwl")" Size="Size.Small" Variant="@V("/cwl")">CWL</MudButton>
+                }
+                @if (f.CapitalRaids)
+                {
+                    <MudButton Href="@($"{Base}/capital")" Size="Size.Small" Variant="@V("/capital")">Capital</MudButton>
+                }
+                @if (f.RiverRace)
+                {
+                    <MudButton Href="@($"{Base}/guerra-de-clas")" Size="Size.Small" Variant="@V("/guerra-de-clas")">@L["TabRiverRace"]</MudButton>
+                }
+                <MudButton Href="@($"{Base}/temporada")" Size="Size.Small" Variant="@V("/temporada")">Temporada</MudButton>
+                @if (f.Rankings)
+                {
+                    <MudButton Href="@($"{Base}/ranking")" Size="Size.Small" Variant="@V("/ranking")">Ranking</MudButton>
+                }
+                @if (_ctx.IsStaff)
+                {
+                    <MudButton Href="@($"{Base}/recrutamento")" Size="Size.Small" Variant="@V("/recrutamento")">Recrutamento</MudButton>
+                }
+                <MudButton Href="@($"{Base}/alertas")" Size="Size.Small" Variant="@V("/alertas")">Alertas</MudButton>
+                @if (_ctx.IsAdmin)
+                {
+                    <MudButton Href="@($"{Base}/configuracoes")" Size="Size.Small" Variant="@V("/configuracoes")">Configurações</MudButton>
+                }
+            </MudStack>
+        </div>
+        <CascadingValue Value="_ctx">@Body</CascadingValue>
+    }
+</div>
+
+@code {
+    private static readonly Regex Pattern = new(@"/app/(?<ws>[0-9a-f-]{36})/cla/(?<id>[0-9a-f-]{36})", RegexOptions.IgnoreCase);
+    private readonly ClanContext _ctx = new();
+    private Guid _loadedFor;
+
+    private string Base => $"/app/{_ctx.Ws}/cla/{_ctx.ClanId}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _ctx.Reload = LoadAsync;
+        Nav.LocationChanged += OnLocationChanged;
+        await LoadAsync();
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        await InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
+    private async Task LoadAsync()
+    {
+        var m = Pattern.Match(Nav.Uri);
+        if (!m.Success) return;
+        var id = Guid.Parse(m.Groups["id"].Value);
+        _ctx.Ws = Guid.Parse(m.Groups["ws"].Value);
+        _ctx.Role = Auth.Me?.Workspaces.FirstOrDefault(w => w.Id == _ctx.Ws)?.Role ?? "Viewer";
+        var changed = id != _loadedFor;
+        _ctx.ClanId = id;
+        if (changed) { _ctx.Overview = null; _ctx.Error = null; StateHasChanged(); }
+        _loadedFor = id;
+
+        var r = await Api.Get<ClanOverviewDto>($"/api/v1/clans/{id}");
+        if (r.Ok) { _ctx.Overview = r.Value; _ctx.Error = null; }
+        else _ctx.Error = r.Error;
+        if (!changed) StateHasChanged();
+    }
+
+    private Variant V(string suffix)
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/');
+        var target = Base + suffix;
+        var active = suffix.Length == 0 ? path.Equals(target, StringComparison.OrdinalIgnoreCase)
+            : path.StartsWith(target, StringComparison.OrdinalIgnoreCase);
+        return active ? Variant.Filled : Variant.Text;
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

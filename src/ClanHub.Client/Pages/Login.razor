@@ -1,0 +1,102 @@
+@page "/entrar"
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject NavigationManager Nav
+@inject PasskeyService Passkeys
+<PageTitle>Entrar — ClanHub</PageTitle>
+
+<div class="page" style="max-width:480px">
+    <MudText Typo="Typo.h4" GutterBottom="true">Entrar</MudText>
+    <MudTextField @bind-Value="_email" Label="E-mail" InputType="InputType.Email" />
+    <MudTextField @bind-Value="_password" Label="Senha" InputType="InputType.Password" OnKeyDown="OnKey" />
+    @if (_needs2fa)
+    {
+        <MudTextField @bind-Value="_code" Label="Código do autenticador (2FA)" />
+    }
+    @if (_error is not null) { <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert> }
+    @if (_unconfirmed)
+    {
+        <MudButton OnClick="Resend" Variant="Variant.Text" Class="mt-1">Reenviar e-mail de confirmação</MudButton>
+    }
+    @if (_info is not null) { <MudAlert Severity="Severity.Info" Class="mt-2">@_info</MudAlert> }
+    <MudButton OnClick="Submit" Disabled="_busy" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mt-4">Entrar</MudButton>
+    @if (_passkeys)
+    {
+        <MudButton OnClick="LoginWithPasskey" Disabled="_busy" Variant="Variant.Outlined" FullWidth="true" Class="mt-2" StartIcon="@Icons.Material.Filled.Key">Entrar com passkey</MudButton>
+    }
+    @if (_discord)
+    {
+        <MudButton Href="@DiscordUrl" Variant="Variant.Outlined" FullWidth="true" Class="mt-2" StartIcon="@Icons.Material.Filled.Forum">Entrar com Discord</MudButton>
+    }
+    <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-4">
+        <MudLink Href="/recuperar-senha">Esqueci a senha</MudLink>
+        <MudLink Href="/cadastro">Criar conta</MudLink>
+    </MudStack>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+
+    private bool _discord, _passkeys;
+    private string DiscordUrl => $"/api/auth/discord/login?returnUrl={Uri.EscapeDataString(!string.IsNullOrEmpty(ReturnUrl) ? ReturnUrl : "/app")}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _passkeys = await Passkeys.IsSupportedAsync();
+        var providers = await Api.Get<List<ProviderDto>>("/api/auth/providers");
+        _discord = providers.Value?.Any(p => p.Id == "discord") == true;
+        _error = Error switch
+        {
+            "discord-email" => "O Discord não informou um e-mail verificado. Verifique o e-mail na sua conta do Discord e tente de novo.",
+            "discord" => "Não foi possível entrar com o Discord.",
+            "locked" => "Conta bloqueada. Tente novamente mais tarde.",
+            _ => null,
+        };
+    }
+
+    private async Task LoginWithPasskey()
+    {
+        _busy = true; _error = null;
+        var error = await Passkeys.LoginAsync();
+        _busy = false;
+        if (error is not null) { _error = error; return; }
+        await Auth.RefreshAsync();
+        Nav.NavigateTo(!string.IsNullOrEmpty(ReturnUrl) && ReturnUrl.StartsWith('/') && !ReturnUrl.StartsWith("//") ? ReturnUrl : "/app");
+    }
+
+    private string _email = "", _password = "", _code = "";
+    private bool _busy, _needs2fa, _unconfirmed;
+    private string? _error, _info;
+
+    private async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Submit(); }
+
+    private async Task Submit()
+    {
+        _busy = true; _error = null; _info = null; _unconfirmed = false;
+        var body = new Dictionary<string, string?> { ["email"] = _email.Trim(), ["password"] = _password };
+        if (_needs2fa) body["twoFactorCode"] = _code;
+        var r = await Api.Send<bool>(HttpMethod.Post, "/api/auth/login?useCookies=true", body);
+        _busy = false;
+        if (r.Ok)
+        {
+            await Auth.RefreshAsync();
+            var target = !string.IsNullOrEmpty(ReturnUrl) && ReturnUrl.StartsWith('/') && !ReturnUrl.StartsWith("//") ? ReturnUrl : "/app";
+            Nav.NavigateTo(target);
+            return;
+        }
+        var err = r.Error ?? "";
+        if (err.Contains("RequiresTwoFactor")) { _needs2fa = true; _error = "Informe o código do seu app autenticador."; }
+        else if (err.Contains("NotAllowed")) { _unconfirmed = true; _error = "Confirme seu e-mail antes de entrar."; }
+        else if (err.Contains("LockedOut")) _error = "Conta bloqueada por excesso de tentativas. Tente novamente em 15 minutos.";
+        else if (r.Status == 429) _error = "Muitas tentativas. Aguarde um minuto.";
+        else _error = "E-mail ou senha incorretos.";
+    }
+
+    private async Task Resend()
+    {
+        await Api.PostOk("/api/auth/resendConfirmationEmail", new { email = _email.Trim() });
+        _info = "Se o e-mail estiver cadastrado, enviamos um novo link.";
+    }
+}

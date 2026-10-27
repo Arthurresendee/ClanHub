@@ -1,0 +1,76 @@
+@page "/app/{Ws:guid}/cla/{Id:guid}/configuracoes"
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+<PageTitle>Configurações do clã — ClanHub</PageTitle>
+
+@if (!Ctx.IsAdmin) { <MudAlert Severity="Severity.Warning">Só Admins e o Dono podem alterar as configurações.</MudAlert> }
+else if (_s is null) { <MudProgressLinear Indeterminate="true" /> }
+else
+{
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Strikes</MudText>
+        <MudNumericField T="int" @bind-Value="_s.StrikeExpiryDays" Label="Validade de um strike (dias)" Min="1" Max="365" />
+        <MudNumericField T="int" @bind-Value="_s.StrikesToWarn" Label="Strikes para destacar o membro" Min="1" Max="20" />
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Ranking</MudText>
+        <MudTextField @bind-Value="_country" Label="Código do país (Brawl Stars; ex.: br, us ou global)" />
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h6" GutterBottom="true">Página pública de recrutamento</MudText>
+        <MudTextField @bind-Value="_slug" Label="Endereço (ex.: dragoes-do-sul)" HelperText="Fica em /c/endereço. Use só letras minúsculas, números e hífen." />
+        <MudTextField @bind-Value="_text" Label="Texto de recrutamento" Lines="4" MaxLength="2000" />
+        <MudSwitch T="bool" @bind-Value="_public" Label="Página pública ativa" Color="Color.Primary" />
+    </MudPaper>
+
+    <MudButton OnClick="Save" Variant="Variant.Filled" Color="Color.Primary">Salvar</MudButton>
+
+    <MudPaper Class="pa-4 mt-6">
+        <MudText Typo="Typo.h6" Color="Color.Error" GutterBottom="true">Parar de acompanhar</MudText>
+        <MudText Class="mb-2">O clã some do workspace e a sincronização é interrompida.</MudText>
+        <MudButton OnClick="Remove" Variant="Variant.Outlined" Color="Color.Error">Parar de acompanhar este clã</MudButton>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+    [Parameter] public Guid Id { get; set; }
+    [CascadingParameter] public ClanContext Ctx { get; set; } = default!;
+
+    private sealed class Model { public int StrikeExpiryDays { get; set; } = 30; public int StrikesToWarn { get; set; } = 3; }
+    private Model? _s;
+    private string _country = "", _slug = "", _text = "";
+    private bool _public;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var r = await Api.Get<ClanSettingsDto>($"/api/v1/clans/{Id}/settings");
+        if (!r.Ok) return;
+        var v = r.Value!;
+        _s = new Model { StrikeExpiryDays = v.StrikeExpiryDays, StrikesToWarn = v.StrikesToWarn };
+        _country = v.CountryCode ?? ""; _slug = v.PublicSlug ?? ""; _text = v.RecruitmentText ?? ""; _public = v.IsPublic;
+    }
+
+    private async Task Save()
+    {
+        var r = await Api.Patch<ClanSettingsDto>($"/api/v1/clans/{Id}", new UpdateClanRequest(
+            _country.Trim(), _s!.StrikeExpiryDays, _s.StrikesToWarn, _public,
+            string.IsNullOrWhiteSpace(_slug) ? null : _slug.Trim(), _text));
+        Snackbar.Add(r.Ok ? "Configurações salvas." : (r.Error ?? "Erro"), r.Ok ? Severity.Success : Severity.Error);
+    }
+
+    private async Task Remove()
+    {
+        var ok = await Dialogs.ShowMessageBoxAsync("Parar de acompanhar", "Remover este clã do workspace?", yesText: "Remover", cancelText: "Cancelar");
+        if (ok != true) return;
+        var r = await Api.Delete($"/api/v1/clans/{Id}");
+        if (!r.Ok) { Snackbar.Add(r.Error ?? "Erro", Severity.Error); return; }
+        await Auth.RefreshAsync();
+        Nav.NavigateTo("/app");
+    }
+}

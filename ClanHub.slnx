@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ClanHub.AppHost/ClanHub.AppHost.csproj" />
+    <Project Path="src/ClanHub.Application/ClanHub.Application.csproj" />
+    <Project Path="src/ClanHub.Client/ClanHub.Client.csproj" />
+    <Project Path="src/ClanHub.Contracts/ClanHub.Contracts.csproj" />
+    <Project Path="src/ClanHub.Domain/ClanHub.Domain.csproj" />
+    <Project Path="src/ClanHub.Infrastructure/ClanHub.Infrastructure.csproj" />
+    <Project Path="src/ClanHub.Server/ClanHub.Server.csproj" />
+    <Project Path="src/ClanHub.ServiceDefaults/ClanHub.ServiceDefaults.csproj" />
+    <Project Path="src/ClanHub.Supercell/ClanHub.Supercell.csproj" />
+    <Project Path="src/ClanHub.Sync/ClanHub.Sync.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ClanHub.Client.Tests/ClanHub.Client.Tests.csproj" />
+    <Project Path="tests/ClanHub.E2E/ClanHub.E2E.csproj" />
+    <Project Path="tests/ClanHub.IntegrationTests/ClanHub.IntegrationTests.csproj" />
+    <Project Path="tests/ClanHub.UnitTests/ClanHub.UnitTests.csproj" />
+  </Folder>
+</Solution>

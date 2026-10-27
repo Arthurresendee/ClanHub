@@ -1,0 +1,4 @@
+{ "items": [ { "seasonId": 120, "sectionIndex": 1, "createdDate": "20251229T090000.000Z", "standings": [
+  { "rank": 2, "clan": { "tag": "#UUU2", "name": "Outro", "fame": 5000, "participants": [] } },
+  { "rank": 1, "clan": { "tag": "#CR22", "name": "Royale Clan", "fame": 6000, "participants": [
+     { "tag": "#P22", "name": "Rei", "fame": 3000, "decksUsed": 16, "decksUsedToday": 0 } ] } } ] } ] }

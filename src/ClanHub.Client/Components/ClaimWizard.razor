@@ -1,0 +1,162 @@
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+@* Fluxo da seção 11: escolher jogo → buscar clã → prévia → verificar posse (token ou código). *@
+<MudStack Spacing="3">
+    <MudSelect T="string" @bind-Value="_game" Label="Jogo" @bind-Value:after="OnGameChanged">
+        @foreach (var g in _games)
+        {
+            <MudSelectItem T="string" Value="@g.Id">@g.Name</MudSelectItem>
+        }
+    </MudSelect>
+
+    @if (Features?.ClanSearch == true)
+    {
+        <MudStack Row="true" AlignItems="AlignItems.End">
+            <MudTextField @bind-Value="_query" Label="Buscar clã pelo nome" Immediate="false" OnKeyDown="OnSearchKey" />
+            <MudButton OnClick="Search" Variant="Variant.Outlined" Disabled="_busy">Buscar</MudButton>
+        </MudStack>
+        @if (_results.Count > 0)
+        {
+            <MudList T="ClanSearchItemDto" Dense="true">
+                @foreach (var c in _results)
+                {
+                    <MudListItem T="ClanSearchItemDto" OnClick="() => PickResult(c)">
+                        <MudText>@c.Name <MudText Typo="Typo.caption" Inline="true">@c.Tag · @c.Members membros</MudText></MudText>
+                    </MudListItem>
+                }
+            </MudList>
+        }
+        <MudText Typo="Typo.caption">ou informe a tag diretamente:</MudText>
+    }
+    else if (_game == GameIds.BrawlStars)
+    {
+        <MudAlert Severity="Severity.Info">O Brawl Stars não tem busca de clubes por nome. Informe a tag do clube.</MudAlert>
+    }
+
+    <MudStack Row="true" AlignItems="AlignItems.End">
+        <MudTextField @bind-Value="_tag" Label="Tag do clã (ex.: #2PP)" />
+        <MudButton OnClick="Preview" Variant="Variant.Outlined" Disabled="_busy">Ver prévia</MudButton>
+    </MudStack>
+
+    @if (_preview is not null)
+    {
+        <MudPaper Class="pa-3" Outlined="true">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                @if (!string.IsNullOrEmpty(_preview.BadgeUrl)) { <ClanBadge Url="@_preview.BadgeUrl" Size="48" /> }
+                <div>
+                    <MudText Typo="Typo.h6">@_preview.Name</MudText>
+                    <MudText Typo="Typo.caption">@_preview.Tag · @_preview.Members membros</MudText>
+                </div>
+            </MudStack>
+            @if (!string.IsNullOrWhiteSpace(_preview.Description)) { <MudText Class="mt-2">@_preview.Description</MudText> }
+        </MudPaper>
+
+        @if (_claim is null)
+        {
+            <MudRadioGroup T="string" @bind-Value="_method">
+                @if (Features?.PlayerTokenVerification == true)
+                {
+                    <MudRadio T="string" Value="@("PlayerToken")">Token do jogador (você é líder ou co-líder)</MudRadio>
+                }
+                <MudRadio T="string" Value="@("DescriptionCode")">Código na descrição do clã</MudRadio>
+            </MudRadioGroup>
+            <MudButton OnClick="StartClaim" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy">Iniciar verificação</MudButton>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info">@_claim.Instructions</MudAlert>
+            @if (_claim.Code is not null)
+            {
+                <MudText Typo="Typo.h4" Align="Align.Center" Style="font-family:monospace">@_claim.Code</MudText>
+            }
+            else
+            {
+                <MudTextField @bind-Value="_playerTag" Label="Sua tag de jogador" />
+                <MudTextField @bind-Value="_playerToken" Label="Token de API do jogador" InputType="InputType.Password" />
+            }
+            <MudButton OnClick="Verify" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy">Verificar agora</MudButton>
+        }
+    }
+
+    @if (_error is not null) { <MudAlert Severity="Severity.Error">@_error</MudAlert> }
+    @if (_busy) { <MudProgressLinear Indeterminate="true" /> }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired] public Guid WorkspaceId { get; set; }
+
+    private List<GameInfoDto> _games = [];
+    private string _game = GameIds.ClashOfClans;
+    private string _query = "", _tag = "", _method = "DescriptionCode", _playerTag = "", _playerToken = "";
+    private List<ClanSearchItemDto> _results = [];
+    private ClanPreviewDto? _preview;
+    private StartClaimResponse? _claim;
+    private string? _error;
+    private bool _busy;
+
+    private GameFeaturesDto? Features => _games.FirstOrDefault(g => g.Id == _game)?.Features;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var r = await Api.Get<List<GameInfoDto>>("/api/v1/games");
+        _games = r.Value ?? [];
+        OnGameChanged();
+    }
+
+    private void OnGameChanged()
+    {
+        _results = []; _preview = null; _claim = null; _error = null;
+        _method = Features?.PlayerTokenVerification == true ? "PlayerToken" : "DescriptionCode";
+    }
+
+    private async Task OnSearchKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Search(); }
+
+    private async Task Search()
+    {
+        _error = null; _busy = true;
+        var r = await Api.Get<List<ClanSearchItemDto>>($"/api/v1/games/{_game}/clans/search?name={Uri.EscapeDataString(_query)}");
+        _busy = false;
+        if (r.Ok) _results = r.Value ?? []; else _error = r.Error;
+    }
+
+    private async Task PickResult(ClanSearchItemDto c)
+    {
+        _tag = c.Tag;
+        await Preview();
+    }
+
+    private async Task Preview()
+    {
+        _error = null; _preview = null; _claim = null; _busy = true;
+        var r = await Api.Get<ClanPreviewDto>($"/api/v1/games/{_game}/clans/{Uri.EscapeDataString(_tag.Trim())}/preview");
+        _busy = false;
+        if (r.Ok) _preview = r.Value; else _error = r.Error;
+    }
+
+    private async Task StartClaim()
+    {
+        _error = null; _busy = true;
+        var r = await Api.Post<StartClaimResponse>($"/api/v1/workspaces/{WorkspaceId}/claims", new StartClaimRequest(_game, _preview!.Tag, _method));
+        _busy = false;
+        if (r.Ok) _claim = r.Value; else _error = r.Error;
+    }
+
+    private async Task Verify()
+    {
+        _error = null; _busy = true;
+        var body = new VerifyClaimRequest(_claim!.Code is null ? _playerTag : null, _claim.Code is null ? _playerToken : null);
+        var r = await Api.Post<VerifyClaimResponse>($"/api/v1/claims/{_claim.ClaimId}/verify", body);
+        _busy = false;
+        if (!r.Ok) { _error = r.Error; return; }
+        if (r.Value!.Verified)
+        {
+            Snackbar.Add(r.Value.Message, Severity.Success);
+            await Auth.RefreshAsync();
+            Nav.NavigateTo($"/app/{WorkspaceId}/cla/{r.Value.ClanId}");
+        }
+        else _error = r.Value.Message;
+    }
+}

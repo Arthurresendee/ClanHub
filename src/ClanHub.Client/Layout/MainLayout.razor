@@ -1,0 +1,136 @@
+@inherits LayoutComponentBase
+@inject ApiAuthStateProvider Auth
+@inject ApiClient Api
+@inject NavigationManager Nav
+@inject IJSRuntime Js
+@inject IStringLocalizer<ClanHub.Client.Resources.Strings> L
+@using Microsoft.Extensions.Localization
+
+<MudThemeProvider Theme="_theme" @bind-IsDarkMode="_dark" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <AuthorizeView>
+            <Authorized>
+                <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="() => _drawer = !_drawer" aria-label="Menu" />
+            </Authorized>
+        </AuthorizeView>
+        <MudLink Href="/" Color="Color.Inherit" Underline="Underline.None"><MudText Typo="Typo.h6">@L["AppName"]</MudText></MudLink>
+        <MudSpacer />
+        <PwaStatus />
+        <MudIconButton Icon="@(_dark ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" Color="Color.Inherit" OnClick="ToggleTheme" aria-label="Alternar tema" />
+        <AuthorizeView>
+            <Authorized>
+                <MudBadge Content="_unread" Visible="_unread > 0" Color="Color.Error" Overlap="true" Class="mx-1">
+                    <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" Href="/app/notificacoes" aria-label="Notificações" />
+                </MudBadge>
+                <MudMenu Icon="@Icons.Material.Filled.AccountCircle" AriaLabel="Menu da conta" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                    <MudText Class="px-4 py-2" Typo="Typo.subtitle2">@context.User.Identity?.Name</MudText>
+                    <MudDivider />
+                    <MudMenuItem Href="/app/conta">@L["NavAccount"]</MudMenuItem>
+                    <MudMenuItem OnClick="Logout">@L["NavLogout"]</MudMenuItem>
+                </MudMenu>
+            </Authorized>
+            <NotAuthorized>
+                <MudButton Href="/entrar" Color="Color.Inherit">@L["NavLogin"]</MudButton>
+                <MudButton Href="/cadastro" Color="Color.Inherit" Variant="Variant.Outlined" Class="ml-2">@L["NavSignup"]</MudButton>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudAppBar>
+
+    <AuthorizeView>
+        <Authorized>
+            <MudDrawer @bind-Open="_drawer" Elevation="1" Variant="DrawerVariant.Responsive" ClipMode="DrawerClipMode.Always">
+                <MudNavMenu>
+                    <MudNavLink Href="/app" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Dashboard">@L["NavWorkspaces"]</MudNavLink>
+                    @foreach (var ws in Auth.Me?.Workspaces ?? [])
+                    {
+                        <MudNavGroup Title="@ws.Name" Expanded="true">
+                            @foreach (var clan in ws.Clans)
+                            {
+                                <MudNavLink Href="@($"/app/{ws.Id}/cla/{clan.Id}")" Match="NavLinkMatch.Prefix">@clan.Name</MudNavLink>
+                            }
+                            @if (ws.Role is "Owner" or "Admin")
+                            {
+                                <MudNavLink Href="@($"/app/{ws.Id}/clas/novo")" Icon="@Icons.Material.Filled.Add">@L["NavAddClan"]</MudNavLink>
+                            }
+                            <MudNavLink Href="@($"/app/{ws.Id}/equipe")" Icon="@Icons.Material.Filled.Group">@L["NavTeam"]</MudNavLink>
+                            @if (ws.Role is "Owner" or "Admin")
+                            {
+                                <MudNavLink Href="@($"/app/{ws.Id}/configuracoes")" Icon="@Icons.Material.Filled.Settings">Configurações</MudNavLink>
+                            }
+                        </MudNavGroup>
+                    }
+                    <MudNavLink Href="/app/notificacoes" Icon="@Icons.Material.Filled.Notifications">Notificações</MudNavLink>
+                    <MudNavLink Href="/app/torneios" Icon="@Icons.Material.Filled.EmojiEvents">Torneios (CR)</MudNavLink>
+                    <MudNavLink Href="/app/conta" Icon="@Icons.Material.Filled.Person">@L["NavAccount"]</MudNavLink>
+                    @if (Auth.Me?.IsPlatformAdmin == true)
+                    {
+                        <MudNavLink Href="/admin" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.AdminPanelSettings">Administração</MudNavLink>
+                        <MudNavLink Href="/admin/sync" Icon="@Icons.Material.Filled.Sync">@L["NavAdminSync"]</MudNavLink>
+                    }
+                </MudNavMenu>
+            </MudDrawer>
+        </Authorized>
+    </AuthorizeView>
+
+    <MudMainContent>
+        @Body
+        <footer class="supercell-footer">
+            <div>@L["SupercellNotice"]</div>
+            <div><MudLink Href="/termos">Termos</MudLink> · <MudLink Href="/privacidade">Privacidade</MudLink></div>
+        </footer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _dark;
+    private bool _drawer = true;
+    private readonly MudTheme _theme = new();
+    private int _unread;
+    private PollingLoop? _poll;
+
+    private async Task RefreshUnread()
+    {
+        var state = await Auth.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated != true) { _unread = 0; return; }
+        var r = await Api.Get<UnreadCountDto>("/api/v1/me/notifications/unread-count");
+        _unread = r.Ok ? r.Value!.Count : 0;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Auth.AuthenticationStateChanged += async _ => { await RefreshUnread(); await InvokeAsync(StateHasChanged); };
+        Auth.MeChanged += () => InvokeAsync(StateHasChanged);
+        await Auth.GetAuthenticationStateAsync();
+        await RefreshUnread();
+        _poll = new PollingLoop(Js, TimeSpan.FromSeconds(60), RefreshUnread);
+        _poll.Start();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        string? saved = null;
+        try { saved = await Js.InvokeAsync<string?>("clanhub.getTheme"); } catch { }
+        _dark = saved is null ? await Js.InvokeAsync<bool>("clanhub.prefersDark") : saved == "dark";
+        StateHasChanged();
+    }
+
+    private async Task ToggleTheme()
+    {
+        _dark = !_dark;
+        try { await Js.InvokeVoidAsync("clanhub.setTheme", _dark ? "dark" : "light"); } catch { }
+    }
+
+    private async Task Logout()
+    {
+        await Api.PostOk("/api/auth/logout");
+        await Auth.RefreshAsync();
+        Nav.NavigateTo("/");
+    }
+}

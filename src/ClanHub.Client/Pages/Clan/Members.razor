@@ -1,0 +1,72 @@
+@page "/app/{Ws:guid}/cla/{Id:guid}/membros"
+@inject ApiClient Api
+<PageTitle>Membros — ClanHub</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.End" Class="mb-2" Wrap="Wrap.Wrap">
+    <MudTextField @bind-Value="_q" Label="Buscar por nome ou tag" Immediate="true" DebounceInterval="300" OnDebounceIntervalElapsed="Load" />
+    <MudSelect T="string" @bind-Value="_status" Label="Situação" @bind-Value:after="Load">
+        <MudSelectItem T="string" Value="@("current")">Atuais</MudSelectItem>
+        <MudSelectItem T="string" Value="@("former")">Antigos</MudSelectItem>
+        <MudSelectItem T="string" Value="@("all")">Todos</MudSelectItem>
+    </MudSelect>
+    <MudSelect T="string" @bind-Value="_sort" Label="Ordenar por" @bind-Value:after="Load">
+        <MudSelectItem T="string" Value="@("rank")">Posição</MudSelectItem>
+        <MudSelectItem T="string" Value="@("name")">Nome</MudSelectItem>
+        <MudSelectItem T="string" Value="@("trophies")">Troféus</MudSelectItem>
+        <MudSelectItem T="string" Value="@("donations")">Doações</MudSelectItem>
+        <MudSelectItem T="string" Value="@("level")">Nível</MudSelectItem>
+        <MudSelectItem T="string" Value="@("activity")">Atividade</MudSelectItem>
+    </MudSelect>
+    <MudButton Href="@($"/api/v1/clans/{Id}/reports/members?format=csv")" Target="_blank" Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Download">CSV</MudButton>
+</MudStack>
+
+@if (_error is not null) { <MudAlert Severity="Severity.Error">@_error</MudAlert> }
+else if (_members is null) { <MudProgressLinear Indeterminate="true" /> }
+else
+{
+    <div class="table-scroll">
+        <MudSimpleTable Dense="true" Hover="true">
+            <thead>
+                <tr><th>#</th><th>Nome</th><th>Cargo</th><th>Nível</th><th>Troféus</th>
+                    @if (HasDonations) { <th>Doou</th><th>Recebeu</th> }
+                    <th>Atividade</th><th>Strikes</th></tr>
+            </thead>
+            <tbody>
+            @foreach (var m in _members)
+            {
+                <tr>
+                    <td>@m.ClanRank</td>
+                    <td><MudLink Href="@($"/app/{Ws}/cla/{Id}/membros/{Uri.EscapeDataString(m.Tag)}")">@m.Name</MudLink><br /><MudText Typo="Typo.caption">@m.Tag</MudText></td>
+                    <td>@Format.Role(m.Role)</td>
+                    <td>@(m.ExpLevel == 0 ? "—" : m.ExpLevel)</td>
+                    <td>@m.Trophies</td>
+                    @if (HasDonations) { <td>@m.Donations</td><td>@m.DonationsReceived</td> }
+                    <td>@(m.IsCurrent ? Format.Ago(m.LastActivityAt) : $"saiu {Format.Ago(m.LeftAt)}")</td>
+                    <td>@(m.Strikes > 0 ? m.Strikes : "")</td>
+                </tr>
+            }
+            </tbody>
+        </MudSimpleTable>
+    </div>
+    <MudText Typo="Typo.caption" Class="mt-2">A atividade é estimada: considera doações, recebimentos, troféus e ataques de guerra observados.</MudText>
+}
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+    [Parameter] public Guid Id { get; set; }
+    [CascadingParameter] public ClanContext Ctx { get; set; } = default!;
+
+    private List<MemberDto>? _members;
+    private string _q = "", _status = "current", _sort = "rank";
+    private string? _error;
+
+    private bool HasDonations => Ctx.Overview?.Features.Wars == true || Ctx.Overview?.Features.RiverRace == true;
+
+    protected override async Task OnParametersSetAsync() => await Load();
+
+    private async Task Load()
+    {
+        var r = await Api.Get<List<MemberDto>>($"/api/v1/clans/{Id}/members?status={_status}&sort={_sort}&q={Uri.EscapeDataString(_q)}");
+        if (r.Ok) { _members = r.Value; _error = null; } else _error = r.Error;
+    }
+}

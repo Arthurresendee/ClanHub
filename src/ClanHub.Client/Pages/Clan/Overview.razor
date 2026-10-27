@@ -1,0 +1,106 @@
+@page "/app/{Ws:guid}/cla/{Id:guid}"
+@implements IDisposable
+@inject IJSRuntime Js
+<PageTitle>@(Ctx.Overview?.Clan.Name ?? "Clã") — ClanHub</PageTitle>
+
+@if (Ctx.Overview is { } o)
+{
+    <MudGrid>
+        <MudItem xs="6" md="3"><MudPaper Class="pa-3"><MudText Typo="Typo.caption">Membros</MudText><MudText Typo="Typo.h5">@o.Clan.MemberCount</MudText></MudPaper></MudItem>
+        <MudItem xs="6" md="3"><MudPaper Class="pa-3"><MudText Typo="Typo.caption">@(o.Features.Wars || o.Features.RiverRace ? "Doações na temporada" : "Troféus somados")</MudText><MudText Typo="Typo.h5">@(o.Features.Wars || o.Features.RiverRace ? o.TotalDonations : o.TotalTrophies)</MudText></MudPaper></MudItem>
+        @if (o.Features.Wars)
+        {
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-3">
+                    <MudText Typo="Typo.caption">Guerra atual</MudText>
+                    @if (o.CurrentWar is { } w)
+                    {
+                        <MudText Typo="Typo.h6">vs @w.OpponentName · @Format.WarState(w.State)</MudText>
+                        <MudText>@w.Stars ⭐ × @w.OpponentStars ⭐ · @w.PendingAttackers sem atacar</MudText>
+                        <MudLink Href="@($"/app/{Ws}/cla/{Id}/guerra")">Ver guerra</MudLink>
+                    }
+                    else { <MudText>Nenhuma guerra em andamento.</MudText> }
+                </MudPaper>
+            </MudItem>
+        }
+        @if (o.Features.RiverRace)
+        {
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-3">
+                    <MudText Typo="Typo.caption">Guerra de Clãs</MudText>
+                    @if (o.CurrentRiverRace is { } r)
+                    {
+                        <MudText Typo="Typo.h6">@r.Fame de fama · @(r.Rank)º lugar</MudText>
+                        <MudText>@r.ParticipantsPendingToday membros ainda não usaram todos os decks hoje</MudText>
+                        <MudLink Href="@($"/app/{Ws}/cla/{Id}/guerra-de-clas")">Ver detalhes</MudLink>
+                    }
+                    else { <MudText>Sem dados da semana ainda.</MudText> }
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+
+    @if (_ranking is { Rank: not null } rk)
+    {
+        <MudPaper Class="pa-3 mt-3">
+            <MudText Typo="Typo.caption">Ranking (@(rk.LocationName ?? rk.Scope))</MudText>
+            <MudText Typo="Typo.h6">@(rk.Rank)º lugar · @rk.Score.ToString("N0") pontos</MudText>
+            <MudLink Href="@($"/app/{Ws}/cla/{Id}/ranking")">Ver evolução</MudLink>
+        </MudPaper>
+    }
+    @if (_calendar is { Count: > 0 })
+    {
+        <MudPaper Class="pa-3 mt-3">
+            <MudText Typo="Typo.caption">Calendário</MudText>
+            @foreach (var e in _calendar.Take(6))
+            {
+                <MudText>@e.Title — @Format.Dt(e.Start) a @Format.Dt(e.End)</MudText>
+            }
+        </MudPaper>
+    }
+
+    <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Atividade recente</MudText>
+    @if (o.RecentEvents.Count == 0) { <MudText>Ainda sem eventos. Eles aparecem conforme o clã é sincronizado.</MudText> }
+    @foreach (var e in o.RecentEvents)
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="my-1">
+            <MudIcon Icon="@Format.EventIcon(e.Type)" Size="Size.Small" />
+            <MudText>@Format.Describe(e)</MudText>
+            <MudText Typo="Typo.caption">@Format.Ago(e.OccurredAt)</MudText>
+        </MudStack>
+    }
+    <MudButton Href="@($"/app/{Ws}/cla/{Id}/atividade")" Size="Size.Small" Class="mt-2">Ver toda a atividade</MudButton>
+}
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+    [Parameter] public Guid Id { get; set; }
+    [CascadingParameter] public ClanContext Ctx { get; set; } = default!;
+
+    private PollingLoop? _poll;
+    private ClanRankingDto? _ranking;
+    private List<CalendarEntryDto>? _calendar;
+    [Inject] private ApiClient Api { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // cartões opcionais: só aparecem se o jogo suporta e há dados
+        for (var i = 0; i < 20 && Ctx.Overview is null; i++) await Task.Delay(100);
+        if (Ctx.Overview?.Features.Rankings == true)
+            _ranking = (await Api.Get<List<ClanRankingDto>>($"/api/v1/clans/{Id}/ranking?days=7")).Value?.LastOrDefault();
+        if (Ctx.Overview?.Features.Calendar == true)
+            _calendar = (await Api.Get<List<CalendarEntryDto>>($"/api/v1/games/{Ctx.Game}/calendar")).Value;
+    }
+
+    protected override void OnInitialized()
+    {
+        _poll = new PollingLoop(Js, TimeSpan.FromSeconds(20), async () =>
+        {
+            await Ctx.Reload();
+            await InvokeAsync(StateHasChanged);
+        });
+        _poll.Start();
+    }
+
+    public void Dispose() => _poll?.Dispose();
+}

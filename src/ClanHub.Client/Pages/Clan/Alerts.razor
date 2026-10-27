@@ -1,0 +1,109 @@
+@page "/app/{Ws:guid}/cla/{Id:guid}/alertas"
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+<PageTitle>Alertas — ClanHub</PageTitle>
+
+<MudText Class="mb-3">Receba avisos no painel e/ou em um canal do Discord quando algo importante acontecer no clã. Cada situação avisa uma vez só.</MudText>
+
+@if (_alerts is null) { <MudProgressLinear Indeterminate="true" /> }
+else if (_alerts.Count == 0) { <MudAlert Severity="Severity.Info" Class="mb-3">Nenhum alerta configurado.</MudAlert> }
+@foreach (var a in _alerts ?? [])
+{
+    <MudPaper Class="pa-3 mb-2">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+            <div>
+                <MudText Typo="Typo.h6">@Label(a.Type)</MudText>
+                <MudText Typo="Typo.caption">
+                    @(a.Channel == "Panel" ? "Painel" : $"Discord ({a.WebhookHint})")
+                    @(a.Days is { } d ? $"· {d} dias" : "") @(a.HoursBeforeEnd is { } h ? $"· {h} h antes do fim" : "") @(a.HourUtc is { } u ? $"· a partir das {u}h UTC" : "")
+                    @(a.LastFiredAt is { } l ? $"· último aviso {Format.Ago(l)}" : "")
+                </MudText>
+            </div>
+            @if (Ctx.IsAdmin)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center">
+                    <MudSwitch T="bool" Value="a.Enabled" ValueChanged="v => Toggle(a, v)" Color="Color.Primary" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="() => Remove(a)" aria-label="Remover alerta" />
+                </MudStack>
+            }
+        </MudStack>
+    </MudPaper>
+}
+
+@if (Ctx.IsAdmin)
+{
+    <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Novo alerta</MudText>
+    <MudSelect T="string" @bind-Value="_type" Label="Quando avisar">
+        @foreach (var t in Types)
+        {
+            <MudSelectItem T="string" Value="@t">@Label(t)</MudSelectItem>
+        }
+    </MudSelect>
+    @if (_type == "MemberInactive") { <MudNumericField T="int" @bind-Value="_days" Label="Dias sem atividade" Min="1" Max="90" /> }
+    @if (_type == "PendingWarAttacks") { <MudNumericField T="int" @bind-Value="_hours" Label="Horas antes do fim da guerra" Min="1" Max="23" /> }
+    @if (_type == "RiverRaceDecksPending") { <MudNumericField T="int" @bind-Value="_hourUtc" Label="A partir de que hora (UTC)" Min="0" Max="23" /> }
+    <MudSelect T="string" @bind-Value="_channel" Label="Onde avisar">
+        <MudSelectItem T="string" Value="@("Panel")">No painel (notificações da equipe)</MudSelectItem>
+        <MudSelectItem T="string" Value="@("DiscordWebhook")">Webhook do Discord</MudSelectItem>
+    </MudSelect>
+    @if (_channel == "DiscordWebhook")
+    {
+        <MudTextField @bind-Value="_webhook" Label="URL do webhook do Discord" InputType="InputType.Password"
+                      HelperText="Configurações do canal → Integrações → Webhooks. A URL é guardada e nunca mais exibida." />
+    }
+    <MudButton OnClick="Create" Variant="Variant.Filled" Color="Color.Primary" Class="mt-3">Criar alerta</MudButton>
+}
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+    [Parameter] public Guid Id { get; set; }
+    [CascadingParameter] public ClanContext Ctx { get; set; } = default!;
+
+    private List<AlertDto>? _alerts;
+    private string _type = "MemberLeft", _channel = "Panel", _webhook = "";
+    private int _days = 7, _hours = 4, _hourUtc = 8;
+
+    private IEnumerable<string> Types => Ctx.Game switch
+    {
+        GameIds.ClashOfClans => ["MemberLeft", "MemberJoined", "PendingWarAttacks", "MemberInactive"],
+        GameIds.ClashRoyale => ["MemberLeft", "MemberJoined", "RiverRaceDecksPending", "MemberInactive"],
+        _ => ["MemberLeft", "MemberJoined", "MemberInactive"],
+    };
+
+    private static string Label(string type) => type switch
+    {
+        "MemberLeft" => "Membro saiu do clã",
+        "MemberJoined" => "Membro entrou no clã",
+        "PendingWarAttacks" => "Ataques pendentes perto do fim da guerra",
+        "MemberInactive" => "Membros inativos (resumo semanal)",
+        "RiverRaceDecksPending" => "Decks pendentes na Guerra de Clãs",
+        _ => type,
+    };
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load() => _alerts = (await Api.Get<List<AlertDto>>($"/api/v1/clans/{Id}/alerts")).Value ?? [];
+
+    private async Task Create()
+    {
+        var r = await Api.Post<AlertDto>($"/api/v1/clans/{Id}/alerts", new CreateAlertRequest(_type, _channel,
+            _type == "MemberInactive" ? _days : null, _type == "PendingWarAttacks" ? _hours : null,
+            _type == "RiverRaceDecksPending" ? _hourUtc : null, _channel == "DiscordWebhook" ? _webhook : null));
+        if (!r.Ok) { Snackbar.Add(r.Error ?? "Erro", Severity.Error); return; }
+        _webhook = "";
+        Snackbar.Add("Alerta criado.", Severity.Success);
+        await Load();
+    }
+
+    private async Task Toggle(AlertDto a, bool enabled)
+    {
+        await Api.Patch<AlertDto>($"/api/v1/alerts/{a.Id}", new UpdateAlertRequest(enabled, null, null, null, null));
+        await Load();
+    }
+
+    private async Task Remove(AlertDto a)
+    {
+        await Api.Delete($"/api/v1/alerts/{a.Id}");
+        await Load();
+    }
+}

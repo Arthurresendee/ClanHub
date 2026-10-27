@@ -1,0 +1,37 @@
+@page "/app/notificacoes"
+@attribute [Authorize]
+@inject ApiClient Api
+<PageTitle>Notificações — ClanHub</PageTitle>
+
+<div class="page" style="max-width:800px">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudText Typo="Typo.h4">Notificações</MudText>
+        <MudButton OnClick="MarkRead" Variant="Variant.Outlined" Size="Size.Small">Marcar todas como lidas</MudButton>
+    </MudStack>
+    @if (_items is null) { <MudProgressLinear Indeterminate="true" /> }
+    else if (_items.Count == 0) { <MudAlert Severity="Severity.Info">Nenhuma notificação. Crie alertas em um clã para receber avisos aqui.</MudAlert> }
+    @foreach (var n in _items ?? [])
+    {
+        <MudPaper Class="pa-3 mb-2" Outlined="@n.Read">
+            <MudText Typo="Typo.subtitle1"><b>@n.Title</b> @if (!n.Read) { <MudChip T="string" Size="Size.Small" Color="Color.Primary">nova</MudChip> }</MudText>
+            @if (!string.IsNullOrEmpty(n.Body)) { <MudText>@n.Body</MudText> }
+            <MudText Typo="Typo.caption">@Format.Ago(n.CreatedAt)</MudText>
+            @if (!string.IsNullOrEmpty(n.Link) && n.Link.StartsWith('/')) { <MudLink Href="@n.Link" Class="ml-2">Abrir</MudLink> }
+        </MudPaper>
+    }
+</div>
+
+@code {
+    private List<NotificationDto>? _items;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load() =>
+        _items = (await Api.Get<Page<NotificationDto>>("/api/v1/me/notifications?limit=100")).Value?.Items.ToList() ?? [];
+
+    private async Task MarkRead()
+    {
+        await Api.PostOk("/api/v1/me/notifications/read");
+        await Load();
+    }
+}

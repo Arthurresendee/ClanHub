@@ -1,0 +1,5 @@
+{ "state": "full", "sectionIndex": 2, "periodIndex": 10,
+  "clan": { "tag": "#CR22", "name": "Royale Clan", "fame": 1200, "participants": [
+    { "tag": "#P22", "name": "Rei", "fame": 600, "decksUsed": 8, "decksUsedToday": 3 },
+    { "tag": "#P92", "name": "Peao", "fame": 0, "decksUsed": 0, "decksUsedToday": 0 } ] },
+  "clans": [ { "tag": "#CR22", "fame": 1200 }, { "tag": "#UUU2", "fame": 2000 } ] }

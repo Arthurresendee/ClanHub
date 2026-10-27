@@ -1,0 +1,153 @@
+@page "/app/{Ws:guid}/cla/{Id:guid}/membros/{Tag}"
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+<PageTitle>@(_detail?.Member.Name ?? "Membro") — ClanHub</PageTitle>
+
+<MudButton Href="@($"/app/{Ws}/cla/{Id}/membros")" StartIcon="@Icons.Material.Filled.ArrowBack" Size="Size.Small">Membros</MudButton>
+
+@if (_error is not null) { <MudAlert Severity="Severity.Error">@_error</MudAlert> }
+else if (_detail is null) { <MudProgressLinear Indeterminate="true" /> }
+else
+{
+    var m = _detail.Member;
+    <MudText Typo="Typo.h5" Class="mt-2">@m.Name <MudText Typo="Typo.caption" Inline="true">@m.Tag</MudText></MudText>
+    <MudText>@Format.Role(m.Role) · @m.Trophies troféus @(m.ExpLevel > 0 ? $"· nível {m.ExpLevel}" : "") @(m.TownHall is { } th ? $"· CV {th}" : "")</MudText>
+    <MudText Typo="Typo.caption">@(m.IsCurrent ? $"No clã desde {Format.Dt(m.JoinedAt)}" : $"Saiu em {Format.Dt(m.LeftAt)}") · atividade {Format.Ago(m.LastActivityAt)}</MudText>
+
+    <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Evolução (90 dias)</MudText>
+    @if (_detail.History.Count < 2)
+    {
+        <MudText>Os gráficos aparecem depois de alguns dias de dados diários.</MudText>
+    }
+    else
+    {
+        <MudText Typo="Typo.caption">Troféus</MudText>
+        <MudChart T="double" ChartType="ChartType.Line" ChartSeries="_trophySeries" ChartLabels="_labels" Height="260px" Width="100%" />
+        @if (HasDonations)
+        {
+            <MudText Typo="Typo.caption">Doações</MudText>
+            <MudChart T="double" ChartType="ChartType.Line" ChartSeries="_donationSeries" ChartLabels="_labels" Height="260px" Width="100%" />
+        }
+    }
+
+    @if (_detail.Wars.Count > 0)
+    {
+        <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Guerras recentes</MudText>
+        @foreach (var w in _detail.Wars)
+        {
+            <MudText>@Format.Dt(w.EndTime) · vs @w.OpponentName · @Format.WarResult(w.Result)</MudText>
+        }
+    }
+
+    @if (Ctx.Overview?.Features.BattleLog == true)
+    {
+        <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Batalhas recentes</MudText>
+        @if (_battles is null) { <MudButton OnClick="LoadBattles" Size="Size.Small" Variant="Variant.Outlined">Carregar batalhas</MudButton> }
+        else if (_battles.Count == 0) { <MudText>Sem batalhas recentes.</MudText> }
+        else
+        {
+            <div class="table-scroll">
+                <MudSimpleTable Dense="true">
+                    <thead><tr><th>Quando</th><th>Modo</th><th>Resultado</th><th>Troféus</th><th>Detalhes</th></tr></thead>
+                    <tbody>
+                    @foreach (var b in _battles.Take(25))
+                    {
+                        <tr>
+                            <td>@Format.Dt(b.Time)</td><td>@b.Mode</td><td>@b.Result</td>
+                            <td>@(b.TrophyChange is { } tc ? (tc > 0 ? $"+{tc}" : tc.ToString()) : "")</td>
+                            <td>@b.Detail @foreach (var c in b.Deck) { <img src="@c.IconUrl" alt="@c.Name" title="@c.Name (nv @c.Level)" width="28" /> }</td>
+                        </tr>
+                    }
+                    </tbody>
+                </MudSimpleTable>
+            </div>
+        }
+    }
+    @if (Ctx.Overview?.Features.UpcomingChests == true)
+    {
+        <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Próximos baús</MudText>
+        @if (_chests is null) { <MudButton OnClick="LoadChests" Size="Size.Small" Variant="Variant.Outlined">Ver baús</MudButton> }
+        else { <MudText>@string.Join(" → ", _chests.Select(c => c.Name))</MudText> }
+    }
+
+    <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Notas e advertências</MudText>
+    @if (_notes is null) { <MudText Typo="Typo.caption">Sem permissão para ver notas.</MudText> }
+    else
+    {
+        @foreach (var n in _notes)
+        {
+            <MudPaper Class="pa-2 my-1" Outlined="true">
+                <MudText Typo="Typo.caption">@KindLabel(n.Kind)@(n.Kind == "Strike" ? $" ({n.Points})" : "") · @n.AuthorName · @Format.Dt(n.CreatedAt)</MudText>
+                <MudText>@n.Text</MudText>
+            </MudPaper>
+        }
+        <MudStack Row="true" AlignItems="AlignItems.End" Class="mt-2">
+            <MudSelect T="string" @bind-Value="_kind" Label="Tipo">
+                <MudSelectItem T="string" Value="@("Note")">Nota</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Warning")">Advertência</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Strike")">Strike</MudSelectItem>
+            </MudSelect>
+            <MudTextField @bind-Value="_text" Label="Texto" Lines="2" />
+            <MudButton OnClick="AddNote" Variant="Variant.Filled" Color="Color.Primary">Adicionar</MudButton>
+        </MudStack>
+    }
+}
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+    [Parameter] public Guid Id { get; set; }
+    [Parameter] public string Tag { get; set; } = "";
+    [CascadingParameter] public ClanContext Ctx { get; set; } = default!;
+
+    private MemberDetailDto? _detail;
+    private List<NoteDto>? _notes;
+    private string? _error;
+    private string _kind = "Note", _text = "";
+    private List<ChartSeries<double>> _trophySeries = [], _donationSeries = [];
+    private string[] _labels = [];
+
+    private bool HasDonations => Ctx.Overview?.Features.Wars == true || Ctx.Overview?.Features.RiverRace == true;
+
+    private List<BattleDto>? _battles;
+    private List<ChestDto>? _chests;
+
+    private async Task LoadBattles()
+    {
+        var tag = Uri.EscapeDataString(Uri.UnescapeDataString(Tag));
+        var r = await Api.Get<List<BattleDto>>($"/api/v1/clans/{Id}/members/{tag}/battles");
+        if (r.Ok) _battles = r.Value ?? []; else Snackbar.Add(r.Error ?? "Erro", Severity.Error);
+    }
+
+    private async Task LoadChests()
+    {
+        var tag = Uri.EscapeDataString(Uri.UnescapeDataString(Tag));
+        var r = await Api.Get<List<ChestDto>>($"/api/v1/clans/{Id}/members/{tag}/chests");
+        if (r.Ok) _chests = r.Value ?? []; else Snackbar.Add(r.Error ?? "Erro", Severity.Error);
+    }
+
+    private static string KindLabel(string k) => k switch { "Warning" => "Advertência", "Strike" => "Strike", _ => "Nota" };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var tag = Uri.EscapeDataString(Uri.UnescapeDataString(Tag));
+        var r = await Api.Get<MemberDetailDto>($"/api/v1/clans/{Id}/members/{tag}");
+        if (!r.Ok) { _error = r.Error; return; }
+        _detail = r.Value;
+        _labels = _detail!.History.Select(h => h.Date.ToString("dd/MM")).ToArray();
+        _trophySeries = [new ChartSeries<double> { Name = "Troféus", Data = _detail.History.Select(h => (double)h.Trophies).ToArray() }];
+        _donationSeries = [new ChartSeries<double> { Name = "Doações", Data = _detail.History.Select(h => (double)h.Donations).ToArray() }];
+
+        var n = await Api.Get<List<NoteDto>>($"/api/v1/clans/{Id}/members/{tag}/notes");
+        _notes = n.Ok ? n.Value : null;
+    }
+
+    private async Task AddNote()
+    {
+        if (string.IsNullOrWhiteSpace(_text)) return;
+        var tag = Uri.EscapeDataString(Uri.UnescapeDataString(Tag));
+        var r = await Api.Post<NoteDto>($"/api/v1/clans/{Id}/members/{tag}/notes", new CreateNoteRequest(_kind, _text, 1, null));
+        if (!r.Ok) { Snackbar.Add(r.Error ?? "Erro", Severity.Error); return; }
+        _text = "";
+        await OnParametersSetAsync();
+    }
+}

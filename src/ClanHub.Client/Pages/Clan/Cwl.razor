@@ -1,0 +1,142 @@
+@page "/app/{Ws:guid}/cla/{Id:guid}/cwl"
+@implements IDisposable
+@inject ApiClient Api
+@inject IJSRuntime Js
+@inject ISnackbar Snackbar
+<PageTitle>CWL — ClanHub</PageTitle>
+
+@if (_error is not null) { <MudAlert Severity="Severity.Error">@_error</MudAlert> }
+else if (_cwl is null) { <MudProgressLinear Indeterminate="true" /> }
+else if (_cwl.Season is null)
+{
+    <MudAlert Severity="Severity.Info">Este clã não está em uma Liga de Guerra de Clãs agora. Quando a CWL começar (início do mês), o grupo e as rodadas aparecem aqui sozinhos.</MudAlert>
+}
+else
+{
+    var s = _cwl.Season;
+    <MudText Typo="Typo.h5">Temporada @s.Season <MudText Typo="Typo.caption" Inline="true">@s.State</MudText></MudText>
+
+    <MudText Typo="Typo.h6" Class="mt-3" GutterBottom="true">Rodadas</MudText>
+    <div class="table-scroll">
+        <MudSimpleTable Dense="true" Hover="true">
+            <thead><tr><th>Rodada</th><th>Situação</th><th>Oponente</th><th>Placar</th><th>Resultado</th></tr></thead>
+            <tbody>
+            @foreach (var r in s.Rounds)
+            {
+                <tr>
+                    <td>@r.Index</td>
+                    <td>@(r.State == "NotStarted" ? "Não começou" : Format.WarState(r.State))</td>
+                    <td>@(r.War?.OpponentName ?? "—")</td>
+                    <td>@(r.War is null ? "—" : $"{r.War.Stars} × {r.War.OpponentStars}")</td>
+                    <td>@(r.War is null ? "—" : Format.WarResult(r.War.Result))</td>
+                </tr>
+            }
+            </tbody>
+        </MudSimpleTable>
+    </div>
+
+    <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Clãs do grupo</MudText>
+    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+        @foreach (var c in s.Clans) { <MudChip T="string" Size="Size.Small">@c.Name</MudChip> }
+    </MudStack>
+
+    <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Desempenho dos membros</MudText>
+    <div class="table-scroll">
+        <MudSimpleTable Dense="true" Hover="true">
+            <thead><tr><th>Jogador</th><th>CV</th><th>Rodadas</th><th>Ataques</th><th>Estrelas</th><th>% médio</th></tr></thead>
+            <tbody>
+            @foreach (var m in _cwl.Members)
+            {
+                <tr><td>@m.Name</td><td>@m.TownHall</td><td>@m.RoundsPlayed</td><td>@m.Attacks</td><td>@m.Stars</td><td>@m.AverageDestruction.ToString("0.#")</td></tr>
+            }
+            </tbody>
+        </MudSimpleTable>
+    </div>
+
+    <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Medalhas bônus (sugestão)</MudText>
+    <MudStack Row="true" AlignItems="AlignItems.End">
+        <MudNumericField T="int" @bind-Value="_bonus" Label="Total de medalhas bônus do clã" Min="0" Max="10000" />
+        <MudButton OnClick="LoadMedals" Variant="Variant.Outlined">Calcular</MudButton>
+    </MudStack>
+    @if (_medals is { Rows.Count: > 0 })
+    {
+        <div class="table-scroll mt-2">
+            <MudSimpleTable Dense="true">
+                <thead><tr><th>Jogador</th><th>Rodadas</th><th>Estrelas</th><th>Parte</th><th>Medalhas sugeridas</th></tr></thead>
+                <tbody>
+                @foreach (var r in _medals.Rows)
+                {
+                    <tr><td>@r.Name</td><td>@r.RoundsPlayed</td><td>@r.Stars</td><td>@r.SharePercent.ToString("0.#")%</td><td><b>@r.SuggestedMedals</b></td></tr>
+                }
+                </tbody>
+            </MudSimpleTable>
+        </div>
+        <MudText Typo="Typo.caption">É só uma sugestão baseada em participação e desempenho; a liderança decide a distribuição.</MudText>
+    }
+}
+
+@if (_plan is not null)
+{
+    <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Planejamento de escalação (interno)</MudText>
+    <MudText Typo="Typo.caption">Marque quem joga em cada rodada. @(Ctx.IsStaff ? "As alterações são salvas na hora." : "Somente Staff edita.")</MudText>
+    <div class="table-scroll">
+        <MudSimpleTable Dense="true">
+            <thead><tr><th>Jogador</th><th>CV</th>@for (var i = 1; i <= _plan.RoundCount; i++) { <th>R@(i)</th> }</tr></thead>
+            <tbody>
+            @foreach (var row in _plan.Rows)
+            {
+                <tr>
+                    <td>@row.Name</td><td>@row.TownHall</td>
+                    @for (var i = 0; i < _plan.RoundCount; i++)
+                    {
+                        var round = i + 1; var state = row.Rounds[i];
+                        <td>
+                            <MudCheckBox T="bool" Value="state == true" ValueChanged="v => Toggle(row, round, v)" Disabled="!Ctx.IsStaff" Size="Size.Small" Color="Color.Primary" />
+                        </td>
+                    }
+                </tr>
+            }
+            </tbody>
+        </MudSimpleTable>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+    [Parameter] public Guid Id { get; set; }
+    [CascadingParameter] public ClanContext Ctx { get; set; } = default!;
+
+    private CwlCurrentDto? _cwl;
+    private CwlPlanDto? _plan;
+    private CwlMedalsDto? _medals;
+    private int _bonus;
+    private string? _error;
+    private PollingLoop? _poll;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+        _poll = new PollingLoop(Js, TimeSpan.FromSeconds(30), async () => { await Load(); await InvokeAsync(StateHasChanged); });
+        _poll.Start();
+    }
+
+    private async Task Load()
+    {
+        var r = await Api.Get<CwlCurrentDto>($"/api/v1/clans/{Id}/cwl/current");
+        if (!r.Ok) { _error = r.Error; return; }
+        _error = null; _cwl = r.Value;
+        if (_plan is null) _plan = (await Api.Get<CwlPlanDto>($"/api/v1/clans/{Id}/cwl/current/plan")).Value;
+    }
+
+    private async Task LoadMedals() =>
+        _medals = (await Api.Get<CwlMedalsDto>($"/api/v1/clans/{Id}/cwl/current/medals?bonus={_bonus}")).Value;
+
+    private async Task Toggle(CwlPlanRowDto row, int round, bool plays)
+    {
+        var r = await Api.Put<CwlPlanDto>($"/api/v1/clans/{Id}/cwl/current/plan",
+            new UpdateCwlPlanRequest([new CwlPlanCellDto(round, row.Tag, plays ? true : null)]));
+        if (r.Ok) _plan = r.Value; else Snackbar.Add(r.Error ?? "Erro ao salvar.", Severity.Error);
+    }
+
+    public void Dispose() => _poll?.Dispose();
+}

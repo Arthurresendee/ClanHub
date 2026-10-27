@@ -1,0 +1,62 @@
+@page "/admin"
+@attribute [Authorize(Roles = "Admin")]
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+<PageTitle>Administração — ClanHub</PageTitle>
+
+<div class="page">
+    <MudText Typo="Typo.h4" GutterBottom="true">Administração da plataforma</MudText>
+    @if (_overview is not null)
+    {
+        <MudGrid Class="mb-4">
+            <MudItem xs="4"><MudPaper Class="pa-3"><MudText Typo="Typo.caption">Usuários</MudText><MudText Typo="Typo.h5">@_overview.Users</MudText></MudPaper></MudItem>
+            <MudItem xs="4"><MudPaper Class="pa-3"><MudText Typo="Typo.caption">Workspaces</MudText><MudText Typo="Typo.h5">@_overview.Workspaces</MudText></MudPaper></MudItem>
+            <MudItem xs="4"><MudPaper Class="pa-3"><MudText Typo="Typo.caption">Clãs</MudText><MudText Typo="Typo.h5">@_overview.Clans</MudText></MudPaper></MudItem>
+        </MudGrid>
+        @foreach (var g in _overview.Games) { <MudText>@GameIds.Label(g.Game): @g.Clans clã(s), @g.Failing com falha</MudText> }
+        <MudButton Href="/admin/sync" Class="mt-2" Variant="Variant.Outlined">Ver fila de sincronização</MudButton>
+    }
+
+    <MudText Typo="Typo.h6" Class="mt-4" GutterBottom="true">Usuários</MudText>
+    <MudStack Row="true" AlignItems="AlignItems.End" Class="mb-2">
+        <MudTextField @bind-Value="_q" Label="Buscar por nome ou e-mail" />
+        <MudButton OnClick="LoadUsers" Variant="Variant.Outlined">Buscar</MudButton>
+    </MudStack>
+    <div class="table-scroll">
+        <MudSimpleTable Dense="true" Hover="true">
+            <thead><tr><th>Nome</th><th>E-mail</th><th>Confirmado</th><th>Criado</th><th>Situação</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var u in _users)
+            {
+                <tr>
+                    <td>@u.DisplayName</td><td>@u.Email</td><td>@(u.EmailConfirmed ? "sim" : "não")</td><td>@Format.Dt(u.CreatedAt)</td>
+                    <td>@(u.LockedOut ? "bloqueado" : "ativo")</td>
+                    <td><MudButton Size="Size.Small" OnClick="() => Lock(u)">@(u.LockedOut ? "Desbloquear" : "Bloquear")</MudButton></td>
+                </tr>
+            }
+            </tbody>
+        </MudSimpleTable>
+    </div>
+</div>
+
+@code {
+    private AdminOverviewDto? _overview;
+    private List<AdminUserDto> _users = [];
+    private string _q = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _overview = (await Api.Get<AdminOverviewDto>("/api/v1/admin/overview")).Value;
+        await LoadUsers();
+    }
+
+    private async Task LoadUsers() =>
+        _users = (await Api.Get<List<AdminUserDto>>($"/api/v1/admin/users?q={Uri.EscapeDataString(_q)}")).Value ?? [];
+
+    private async Task Lock(AdminUserDto u)
+    {
+        var r = await Api.PostOk($"/api/v1/admin/users/{u.Id}/lock", new LockUserRequest(!u.LockedOut));
+        if (!r.Ok) Snackbar.Add(r.Error ?? "Erro", Severity.Error);
+        await LoadUsers();
+    }
+}

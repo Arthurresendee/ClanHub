@@ -1,0 +1,95 @@
+@page "/app/{Ws:guid}/cla/{Id:guid}/atividade"
+@implements IDisposable
+@inject ApiClient Api
+@inject IJSRuntime Js
+<PageTitle>Atividade — ClanHub</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.End" Class="mb-2" Wrap="Wrap.Wrap">
+    <MudSelect T="string" @bind-Value="_type" Label="Tipo de evento" @bind-Value:after="Reload">
+        <MudSelectItem T="string" Value="@("")">Todos</MudSelectItem>
+        @foreach (var t in Types)
+        {
+            <MudSelectItem T="string" Value="@t.Key">@t.Value</MudSelectItem>
+        }
+    </MudSelect>
+    <MudTextField @bind-Value="_player" Label="Tag do jogador" Immediate="false" @bind-Value:after="Reload" />
+    <MudText Typo="Typo.caption">Atualiza sozinho a cada 20 segundos</MudText>
+</MudStack>
+
+@if (_error is not null) { <MudAlert Severity="Severity.Error">@_error</MudAlert> }
+else if (_events is null) { <MudProgressLinear Indeterminate="true" /> }
+else if (_events.Count == 0) { <MudText>Nenhum evento ainda.</MudText> }
+else
+{
+    @foreach (var e in _events)
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="my-1">
+            <MudIcon Icon="@Format.EventIcon(e.Type)" Size="Size.Small" />
+            <MudText>@Format.Describe(e)</MudText>
+            <MudText Typo="Typo.caption">@Format.Dt(e.OccurredAt)</MudText>
+        </MudStack>
+    }
+    @if (_next is not null)
+    {
+        <MudButton OnClick="More" Class="mt-2" Variant="Variant.Outlined">Carregar mais</MudButton>
+    }
+}
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+    [Parameter] public Guid Id { get; set; }
+
+    private static readonly Dictionary<string, string> Types = new()
+    {
+        ["MemberJoined"] = "Entradas", ["MemberLeft"] = "Saídas", ["RoleChanged"] = "Mudanças de cargo",
+        ["DonationsChanged"] = "Doações", ["WarAttackMade"] = "Ataques de guerra", ["WarStarted"] = "Guerras iniciadas",
+        ["WarEnded"] = "Guerras encerradas", ["RiverRaceDecksUsed"] = "Decks usados",
+        ["CwlRoundStarted"] = "Rodadas da CWL", ["RaidAttackMade"] = "Ataques à Capital",
+    };
+
+    private List<EventDto>? _events;
+    private long _lastId;
+    private string? _next, _error, _type = "", _player = "";
+    private PollingLoop? _poll;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Reload();
+        _poll = new PollingLoop(Js, TimeSpan.FromSeconds(20), PollAsync);
+        _poll.Start();
+    }
+
+    private string Query(string extra) =>
+        $"/api/v1/clans/{Id}/events?type={Uri.EscapeDataString(_type ?? "")}&playerTag={Uri.EscapeDataString(_player ?? "")}{extra}";
+
+    private async Task Reload()
+    {
+        var r = await Api.Get<EventsResponse>(Query(""));
+        if (!r.Ok) { _error = r.Error; return; }
+        _error = null;
+        _events = r.Value!.Items.ToList();
+        _lastId = r.Value.LastId;
+        _next = r.Value.NextCursor;
+    }
+
+    private async Task More()
+    {
+        var r = await Api.Get<EventsResponse>(Query($"&cursor={_next}"));
+        if (!r.Ok) return;
+        _events!.AddRange(r.Value!.Items);
+        _next = r.Value.NextCursor;
+    }
+
+    // Só pede o que chegou de novo (afterId).
+    private async Task PollAsync()
+    {
+        if (_events is null) return;
+        var r = await Api.Get<EventsResponse>(Query($"&afterId={_lastId}"));
+        if (!r.Ok || r.Value!.Items.Count == 0) return;
+        _events.InsertRange(0, r.Value.Items.OrderByDescending(e => e.Id));
+        _lastId = r.Value.LastId;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => _poll?.Dispose();
+}

@@ -1,0 +1,6 @@
+[ { "type": "PvP", "battleTime": "20260101T120000.000Z", "gameMode": { "name": "Ladder" },
+    "team": [ { "tag": "#P22", "name": "Rei", "crowns": 3, "trophyChange": 30, "cards": [ { "name": "Knight", "level": 14, "iconUrls": { "medium": "https://img/knight.png" } } ] } ],
+    "opponent": [ { "tag": "#P92", "name": "Peao", "crowns": 1, "cards": [] } ] },
+  { "type": "PvP", "battleTime": "20260101T110000.000Z", "gameMode": { "name": "Ladder" },
+    "team": [ { "tag": "#P22", "name": "Rei", "crowns": 0, "trophyChange": -28, "cards": [] } ],
+    "opponent": [ { "tag": "#P92", "name": "Peao", "crowns": 2, "cards": [] } ] } ]

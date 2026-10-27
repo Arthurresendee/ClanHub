@@ -1,0 +1,48 @@
+@page "/app/torneios"
+@attribute [Authorize]
+@inject ApiClient Api
+<PageTitle>Torneios — ClanHub</PageTitle>
+
+<div class="page" style="max-width:900px">
+    <MudText Typo="Typo.h4" GutterBottom="true">Torneios do Clash Royale</MudText>
+    <MudText Class="mb-3">Procure torneios abertos para jogar com o seu clã.</MudText>
+    <MudStack Row="true" AlignItems="AlignItems.End" Class="mb-3">
+        <MudTextField @bind-Value="_name" Label="Nome do torneio" OnKeyDown="OnKey" />
+        <MudButton OnClick="Search" Variant="Variant.Filled" Color="Color.Primary" Disabled="_busy">Buscar</MudButton>
+    </MudStack>
+    @if (_error is not null) { <MudAlert Severity="Severity.Error">@_error</MudAlert> }
+    @if (_list is { Count: 0 }) { <MudText>Nenhum torneio encontrado.</MudText> }
+    <div class="table-scroll">
+        @if (_list is { Count: > 0 })
+        {
+            <MudSimpleTable Dense="true" Hover="true">
+                <thead><tr><th>Torneio</th><th>Tag</th><th>Situação</th><th>Jogadores</th></tr></thead>
+                <tbody>
+                @foreach (var t in _list)
+                {
+                    <tr><td>@t.Name</td><td>@t.Tag</td><td>@Status(t.Status)</td><td>@t.Players/@t.Capacity</td></tr>
+                }
+                </tbody>
+            </MudSimpleTable>
+        }
+    </div>
+</div>
+
+@code {
+    private string _name = "";
+    private List<TournamentDto>? _list;
+    private string? _error;
+    private bool _busy;
+
+    private static string Status(string s) => s switch { "inPreparation" => "Aberto", "inProgress" => "Em andamento", "ended" => "Encerrado", _ => s };
+
+    private async Task OnKey(KeyboardEventArgs e) { if (e.Key == "Enter") await Search(); }
+
+    private async Task Search()
+    {
+        _busy = true; _error = null;
+        var r = await Api.Get<List<TournamentDto>>($"/api/v1/games/ClashRoyale/tournaments/search?name={Uri.EscapeDataString(_name)}");
+        _busy = false;
+        if (r.Ok) _list = r.Value ?? []; else _error = r.Error;
+    }
+}

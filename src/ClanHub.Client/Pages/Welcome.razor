@@ -1,0 +1,40 @@
+@page "/app/bem-vindo"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+<PageTitle>Primeiros passos — ClanHub</PageTitle>
+
+<div class="page" style="max-width:720px">
+    <MudText Typo="Typo.h4" GutterBottom="true">Primeiros passos</MudText>
+
+    @if (_workspaceId is null)
+    {
+        <MudText Typo="Typo.h6" GutterBottom="true">1. Crie seu workspace</MudText>
+        <MudText Class="mb-2">Um workspace agrupa os clãs da mesma “família” e a equipe que cuida deles.</MudText>
+        <MudTextField @bind-Value="_name" Label="Nome do workspace" Placeholder="Ex.: Família Dragões" />
+        @if (_error is not null) { <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert> }
+        <MudButton OnClick="CreateWorkspace" Disabled="_busy" Variant="Variant.Filled" Color="Color.Primary" Class="mt-4">Criar e continuar</MudButton>
+    }
+    else
+    {
+        <MudText Typo="Typo.h6" GutterBottom="true">2. Adicione o seu clã</MudText>
+        <ClaimWizard WorkspaceId="_workspaceId.Value" />
+    }
+</div>
+
+@code {
+    private string _name = "";
+    private string? _error;
+    private bool _busy;
+    private Guid? _workspaceId;
+
+    private async Task CreateWorkspace()
+    {
+        _busy = true; _error = null;
+        var r = await Api.Post<WorkspaceSummaryDto>("/api/v1/workspaces", new CreateWorkspaceRequest(_name));
+        _busy = false;
+        if (!r.Ok) { _error = r.Error; return; }
+        _workspaceId = r.Value!.Id;
+        await Auth.RefreshAsync();
+    }
+}

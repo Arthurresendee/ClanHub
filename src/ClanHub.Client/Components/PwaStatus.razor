@@ -1,0 +1,53 @@
+@implements IAsyncDisposable
+@inject IJSRuntime Js
+
+@* Botão "Instalar app" (Android/desktop) + dica para iOS + aviso de falta de conexão. *@
+@if (!_online)
+{
+    <MudAlert Severity="Severity.Warning" Dense="true" Square="true" Class="offline-banner">
+        Você está sem conexão. Os dados do clã só atualizam quando a internet voltar.
+    </MudAlert>
+}
+@if (_canInstall)
+{
+    <MudButton OnClick="Install" Color="Color.Inherit" Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.InstallMobile" Class="mr-2">Instalar app</MudButton>
+}
+else if (_iosHint)
+{
+    <MudTooltip Text="No Safari: Compartilhar → Adicionar à Tela de Início">
+        <MudIconButton Icon="@Icons.Material.Filled.InstallMobile" Color="Color.Inherit" aria-label="Como instalar no iPhone" />
+    </MudTooltip>
+}
+
+@code {
+    private DotNetObjectReference<PwaStatus>? _ref;
+    private bool _online = true, _canInstall, _iosHint;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            _ref = DotNetObjectReference.Create(this);
+            _online = await Js.InvokeAsync<bool>("clanhub.isOnline");
+            var standalone = await Js.InvokeAsync<bool>("clanhub.isStandalone");
+            _canInstall = !standalone && await Js.InvokeAsync<bool>("clanhub.canInstall");
+            _iosHint = !standalone && await Js.InvokeAsync<bool>("clanhub.isIos");
+            await Js.InvokeVoidAsync("clanhub.onConnectivity", _ref);
+            await Js.InvokeVoidAsync("clanhub.onInstallAvailable", _ref);
+            StateHasChanged();
+        }
+        catch (JSException) { }
+    }
+
+    private async Task Install()
+    {
+        if (await Js.InvokeAsync<bool>("clanhub.install")) _canInstall = false;
+    }
+
+    [JSInvokable] public void OnConnectivityChanged(bool online) { _online = online; InvokeAsync(StateHasChanged); }
+    [JSInvokable] public void OnInstallAvailable() { _canInstall = true; InvokeAsync(StateHasChanged); }
+    [JSInvokable] public void OnInstalled() { _canInstall = false; _iosHint = false; InvokeAsync(StateHasChanged); }
+
+    public ValueTask DisposeAsync() { _ref?.Dispose(); return ValueTask.CompletedTask; }
+}

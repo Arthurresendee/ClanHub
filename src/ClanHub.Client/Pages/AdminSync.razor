@@ -1,0 +1,50 @@
+@page "/admin/sync"
+@attribute [Authorize(Roles = "Admin")]
+@inject ApiClient Api
+<PageTitle>Sincronização — ClanHub</PageTitle>
+
+<div class="page">
+    <MudText Typo="Typo.h4" GutterBottom="true">Sincronização</MudText>
+    @if (_data is null) { <MudProgressLinear Indeterminate="true" /> }
+    else
+    {
+        <MudGrid Class="mb-4">
+            <MudItem xs="6" md="3"><MudPaper Class="pa-3"><MudText Typo="Typo.caption">Vencidas na fila</MudText><MudText Typo="Typo.h5">@_data.PendingTargets</MudText></MudPaper></MudItem>
+            <MudItem xs="6" md="3"><MudPaper Class="pa-3"><MudText Typo="Typo.caption">Reservadas agora</MudText><MudText Typo="Typo.h5">@_data.LeasedTargets</MudText></MudPaper></MudItem>
+            <MudItem xs="6" md="3"><MudPaper Class="pa-3"><MudText Typo="Typo.caption">Com falha</MudText><MudText Typo="Typo.h5">@_data.FailingTargets</MudText></MudPaper></MudItem>
+            <MudItem xs="6" md="3"><MudPaper Class="pa-3"><MudText Typo="Typo.caption">Atraso máximo</MudText><MudText Typo="Typo.h5">@(_data.OldestDue is null ? "—" : Format.Ago(_data.OldestDue))</MudText></MudPaper></MudItem>
+        </MudGrid>
+
+        <MudText Typo="Typo.h6">Por jogo</MudText>
+        @foreach (var g in _data.Games)
+        {
+            <MudText>@GameIds.Label(g.Game): @g.Clans clã(s), @g.Failing com falha</MudText>
+        }
+
+        <MudText Typo="Typo.h6" Class="mt-4">Falhas</MudText>
+        @if (_data.Failures.Count == 0) { <MudAlert Severity="Severity.Success">Nenhuma falha.</MudAlert> }
+        else
+        {
+            <div class="table-scroll">
+                <MudSimpleTable Dense="true">
+                    <thead><tr><th>Clã</th><th>Jogo</th><th>Tipo</th><th>Falhas</th><th>Último erro</th><th>Próxima</th></tr></thead>
+                    <tbody>
+                    @foreach (var f in _data.Failures)
+                    {
+                        <tr><td>@f.ClanName</td><td>@GameIds.Label(f.Game)</td><td>@f.Kind</td><td>@f.FailCount</td><td>@f.LastError</td><td>@Format.Dt(f.NextRunAt)</td></tr>
+                    }
+                    </tbody>
+                </MudSimpleTable>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private AdminSyncDto? _data;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _data = (await Api.Get<AdminSyncDto>("/api/v1/admin/sync")).Value;
+    }
+}

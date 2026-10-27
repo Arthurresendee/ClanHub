@@ -1,0 +1,63 @@
+@page "/app"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject NavigationManager Nav
+<PageTitle>Meus workspaces — ClanHub</PageTitle>
+
+<div class="page">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Meus workspaces</MudText>
+        <MudButton Href="/app/bem-vindo" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">Novo workspace</MudButton>
+    </MudStack>
+
+    @if (_list is null) { <MudProgressLinear Indeterminate="true" /> }
+    else if (_list.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">Você ainda não tem nenhum workspace. <MudLink Href="/app/bem-vindo">Comece por aqui</MudLink>.</MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var ws in _list)
+            {
+                <MudItem xs="12" md="6">
+                    <MudPaper Class="pa-4">
+                        <MudStack Row="true" Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.h6">@ws.Name</MudText>
+                            <MudChip T="string" Size="Size.Small">@Format.Role(ws.Role)</MudChip>
+                        </MudStack>
+                        @if (ws.Clans.Count == 0)
+                        {
+                            <MudText Class="my-2" Typo="Typo.body2">Nenhum clã ainda.</MudText>
+                        }
+                        @foreach (var c in ws.Clans)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Class="my-2" Spacing="2">
+                                @if (!string.IsNullOrEmpty(c.BadgeUrl)) { <ClanBadge Url="@c.BadgeUrl" Size="28" /> }
+                                <MudLink Href="@($"/app/{ws.Id}/cla/{c.Id}")">@c.Name</MudLink>
+                                <MudText Typo="Typo.caption">@GameIds.Label(c.Game) · @c.MemberCount membros</MudText>
+                                @if (c.Status != "Active") { <MudChip T="string" Size="Size.Small" Color="Color.Warning">@Format.ClanStatus(c.Status)</MudChip> }
+                            </MudStack>
+                        }
+                        <MudStack Row="true" Class="mt-2">
+                            @if (ws.Role is "Owner" or "Admin") { <MudButton Href="@($"/app/{ws.Id}/clas/novo")" Size="Size.Small">Adicionar clã</MudButton> }
+                            <MudButton Href="@($"/app/{ws.Id}/equipe")" Size="Size.Small">Equipe</MudButton>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</div>
+
+@code {
+    private List<WorkspaceSummaryDto>? _list;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var r = await Api.Get<List<WorkspaceSummaryDto>>("/api/v1/workspaces");
+        _list = r.Value ?? [];
+        if (_list.Count == 0 && r.Ok) Nav.NavigateTo("/app/bem-vindo", replace: true);
+    }
+}

@@ -1,0 +1,56 @@
+@page "/app/{Ws:guid}/cla/{Id:guid}/capital"
+@inject ApiClient Api
+<PageTitle>Capital — ClanHub</PageTitle>
+
+@if (_error is not null) { <MudAlert Severity="Severity.Error">@_error</MudAlert> }
+else if (_raids is null) { <MudProgressLinear Indeterminate="true" /> }
+else if (_raids.Count == 0) { <MudAlert Severity="Severity.Info">Ainda sem dados. Os ataques à Capital são sincronizados aos fins de semana de ataque.</MudAlert> }
+else
+{
+    @foreach (var r in _raids)
+    {
+        <MudPaper Class="pa-3 mb-3">
+            <MudText Typo="Typo.h6">@Format.Dt(r.StartTime) → @Format.Dt(r.EndTime)</MudText>
+            <MudText>@r.TotalLoot.ToString("N0") de saque · @r.AttackCount ataques · @r.DistrictsDestroyed distritos destruídos · @r.State</MudText>
+            <div class="table-scroll mt-2">
+                <MudSimpleTable Dense="true">
+                    <thead><tr><th>Jogador</th><th>Ataques</th><th>Saque</th></tr></thead>
+                    <tbody>
+                    @foreach (var m in r.Members)
+                    {
+                        var limit = m.AttackLimit + m.BonusAttackLimit;
+                        <tr class="@(m.Attacks < limit ? "pending" : "")">
+                            <td>@m.Name</td><td>@m.Attacks/@limit</td><td>@m.Looted.ToString("N0")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </MudSimpleTable>
+            </div>
+        </MudPaper>
+    }
+    @if (_next is not null) { <MudButton OnClick="More" Variant="Variant.Outlined">Semanas anteriores</MudButton> }
+}
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+    [Parameter] public Guid Id { get; set; }
+
+    private List<CapitalRaidDto>? _raids;
+    private string? _next, _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var r = await Api.Get<Page<CapitalRaidDto>>($"/api/v1/clans/{Id}/capital/raids");
+        if (!r.Ok) { _error = r.Error; return; }
+        _raids = r.Value!.Items.ToList();
+        _next = r.Value.NextCursor;
+    }
+
+    private async Task More()
+    {
+        var r = await Api.Get<Page<CapitalRaidDto>>($"/api/v1/clans/{Id}/capital/raids?cursor={_next}");
+        if (!r.Ok) return;
+        _raids!.AddRange(r.Value!.Items);
+        _next = r.Value.NextCursor;
+    }
+}

@@ -1,0 +1,13 @@
+@page "/app/{Ws:guid}/clas/novo"
+@attribute [Authorize]
+<PageTitle>Adicionar clã — ClanHub</PageTitle>
+
+<div class="page" style="max-width:720px">
+    <MudText Typo="Typo.h4" GutterBottom="true">Adicionar clã</MudText>
+    <MudText Class="mb-4">Para impedir que alguém “assuma” um clã que não é dele, você precisa comprovar que lidera o clã.</MudText>
+    <ClaimWizard WorkspaceId="Ws" />
+</div>
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+}

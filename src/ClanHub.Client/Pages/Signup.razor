@@ -1,0 +1,54 @@
+@page "/cadastro"
+@inject ApiClient Api
+<PageTitle>Cadastro — ClanHub</PageTitle>
+
+<div class="page" style="max-width:480px">
+    <MudText Typo="Typo.h4" GutterBottom="true">Criar conta</MudText>
+    @if (_done)
+    {
+        <MudAlert Severity="Severity.Success">
+            @if (_needsConfirmation)
+            {
+                <text>Conta criada! Enviamos um link de confirmação para <b>@_email</b>. Abra o e-mail e confirme para poder entrar.</text>
+            }
+            else
+            {
+                <text>Conta criada! Você já pode entrar com <b>@_email</b>.</text>
+            }
+        </MudAlert>
+        <MudButton Href="/entrar" Class="mt-4" Variant="Variant.Filled" Color="Color.Primary">Ir para o login</MudButton>
+    }
+    else
+    {
+        <MudForm @ref="_form">
+            <MudTextField @bind-Value="_name" Label="Nome" Required="true" RequiredError="Informe seu nome" Immediate="true" />
+            <MudTextField @bind-Value="_email" Label="E-mail" InputType="InputType.Email" Required="true" RequiredError="Informe seu e-mail" />
+            <MudTextField @bind-Value="_password" Label="Senha" InputType="InputType.Password" Required="true"
+                          HelperText="Mínimo de 8 caracteres, com maiúscula, minúscula, número e símbolo." RequiredError="Informe uma senha" />
+            <MudCheckBox @bind-Value="_terms" Color="Color.Primary">
+                Li e aceito os <MudLink Href="/termos" Target="_blank">Termos de uso</MudLink> e a <MudLink Href="/privacidade" Target="_blank">Política de privacidade</MudLink>.
+            </MudCheckBox>
+        </MudForm>
+        @if (_error is not null) { <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert> }
+        <MudButton OnClick="Submit" Disabled="_busy" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Class="mt-4">Cadastrar</MudButton>
+        <MudText Class="mt-4">Já tem conta? <MudLink Href="/entrar">Entrar</MudLink></MudText>
+    }
+</div>
+
+@code {
+    private MudForm _form = default!;
+    private string _name = "", _email = "", _password = "";
+    private bool _terms, _busy, _done, _needsConfirmation = true;
+    private string? _error;
+
+    private async Task Submit()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid) return;
+        _busy = true; _error = null;
+        var r = await Api.Post<SignupResponse>("/api/auth/signup", new RegisterRequest(_email.Trim(), _password, _name.Trim(), _terms));
+        _busy = false;
+        if (r.Ok) { _needsConfirmation = r.Value?.RequiresEmailConfirmation ?? true; _done = true; }
+        else _error = r.Error;
+    }
+}

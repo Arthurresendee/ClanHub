@@ -1,0 +1,42 @@
+@page "/convite/{Token}"
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject NavigationManager Nav
+<PageTitle>Convite — ClanHub</PageTitle>
+
+<div class="page" style="max-width:480px">
+    <MudText Typo="Typo.h4" GutterBottom="true">Convite para a equipe</MudText>
+    <AuthorizeView>
+        <Authorized>
+            @if (_error is not null) { <MudAlert Severity="Severity.Error">@_error</MudAlert> }
+            else if (_joined is not null)
+            {
+                <MudAlert Severity="Severity.Success">Você entrou no workspace <b>@_joined.WorkspaceName</b>.</MudAlert>
+                <MudButton Href="@($"/app")" Class="mt-4" Variant="Variant.Filled" Color="Color.Primary">Abrir meu painel</MudButton>
+            }
+            else { <MudProgressLinear Indeterminate="true" /> }
+        </Authorized>
+        <NotAuthorized>
+            <MudText Class="mb-4">Entre ou crie uma conta para aceitar o convite.</MudText>
+            <MudButton Href="@($"/entrar?returnUrl=%2Fconvite%2F{Token}")" Variant="Variant.Filled" Color="Color.Primary">Entrar</MudButton>
+            <MudButton Href="/cadastro" Variant="Variant.Outlined" Class="ml-2">Criar conta</MudButton>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+@code {
+    [Parameter] public string Token { get; set; } = "";
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private AcceptInviteResponse? _joined;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState;
+        if (state.User.Identity?.IsAuthenticated != true) return;
+        var r = await Api.Post<AcceptInviteResponse>($"/api/v1/invites/{Uri.EscapeDataString(Token)}/accept");
+        if (r.Ok) { _joined = r.Value; await Auth.RefreshAsync(); }
+        else _error = r.Error;
+    }
+}

@@ -1,0 +1,53 @@
+@page "/app/{Ws:guid}/cla/{Id:guid}/ranking"
+@inject ApiClient Api
+<PageTitle>Ranking — ClanHub</PageTitle>
+
+@if (_points is null) { <MudProgressLinear Indeterminate="true" /> }
+else if (_points.Count == 0)
+{
+    <MudAlert Severity="Severity.Info">Ainda sem posição registrada. O ranking é consultado uma vez por dia.
+        @if (Ctx.Game == GameIds.BrawlStars) { <text> No Brawl Stars, defina o código do país em Configurações do clã (ou use “global”).</text> }
+    </MudAlert>
+}
+else
+{
+    var last = _points[^1];
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.caption">@(last.LocationName ?? last.Scope)</MudText>
+        <MudText Typo="Typo.h4">@(last.Rank is { } r ? $"{r}º lugar" : "Fora do top 200")</MudText>
+        <MudText>Pontuação: @last.Score.ToString("N0")</MudText>
+    </MudPaper>
+    @if (_points.Count >= 2)
+    {
+        <MudText Typo="Typo.caption">Pontuação</MudText>
+        <MudChart T="double" ChartType="ChartType.Line" ChartSeries="_series" ChartLabels="_labels" Height="260px" Width="100%" />
+    }
+    <div class="table-scroll mt-2">
+        <MudSimpleTable Dense="true">
+            <thead><tr><th>Data</th><th>Posição</th><th>Pontuação</th></tr></thead>
+            <tbody>
+            @foreach (var p in _points.AsEnumerable().Reverse())
+            {
+                <tr><td>@p.Date.ToString("dd/MM/yyyy")</td><td>@(p.Rank?.ToString() ?? "—")</td><td>@p.Score</td></tr>
+            }
+            </tbody>
+        </MudSimpleTable>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+    [Parameter] public Guid Id { get; set; }
+    [CascadingParameter] public ClanContext Ctx { get; set; } = default!;
+
+    private List<ClanRankingDto>? _points;
+    private List<ChartSeries<double>> _series = [];
+    private string[] _labels = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _points = (await Api.Get<List<ClanRankingDto>>($"/api/v1/clans/{Id}/ranking?days=90")).Value ?? [];
+        _labels = _points.Select(p => p.Date.ToString("dd/MM")).ToArray();
+        _series = [new ChartSeries<double> { Name = "Pontuação", Data = _points.Select(p => (double)p.Score).ToArray() }];
+    }
+}

@@ -1,0 +1,2 @@
+{ "tag": "#TTT2", "name": "Torneio Aberto", "status": "inProgress", "type": "open", "description": "Vale tudo", "maxCapacity": 100,
+  "startedTime": "20260101T120000.000Z", "membersList": [ { "tag": "#P22", "name": "Rei" }, { "tag": "#P92", "name": "Peao" } ] }

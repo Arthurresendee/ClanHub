@@ -1,0 +1,77 @@
+@page "/app/{Ws:guid}/cla/{Id:guid}/guerra"
+@implements IDisposable
+@inject ApiClient Api
+@inject IJSRuntime Js
+<PageTitle>Guerra atual — ClanHub</PageTitle>
+
+@if (_error is not null) { <MudAlert Severity="Severity.Error">@_error</MudAlert> }
+else if (!_loaded) { <MudProgressLinear Indeterminate="true" /> }
+else if (_war is null) { <MudAlert Severity="Severity.Info">Nenhuma guerra em andamento. Quando uma começar, ela aparece aqui sozinha.</MudAlert> }
+else
+{
+    var s = _war.Summary;
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.h5">vs @s.OpponentName</MudText>
+        <MudText>@Format.WarState(s.State) · @s.TeamSize x @s.TeamSize @(s.EndTime is { } e ? $"· termina {Format.Dt(e)}" : "")</MudText>
+        <MudText Typo="Typo.h4" Class="mt-2">@s.Stars ⭐ (@s.Destruction.ToString("0.#")%)  ×  @s.OpponentStars ⭐ (@s.OpponentDestruction.ToString("0.#")%)</MudText>
+    </MudPaper>
+
+    <MudText Typo="Typo.h6" GutterBottom="true">Quem ainda não atacou (@Pending.Count)</MudText>
+    @if (Pending.Count == 0) { <MudAlert Severity="Severity.Success">Todos já usaram os ataques.</MudAlert> }
+    else
+    {
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mb-4">
+            @foreach (var p in Pending)
+            {
+                <MudChip T="string" Color="Color.Warning" Size="Size.Small">@p.MapPosition. @p.Name (@p.AttacksUsed/@p.AttacksAllowed)</MudChip>
+            }
+        </MudStack>
+    }
+
+    <MudText Typo="Typo.h6" GutterBottom="true">Ataques</MudText>
+    <div class="table-scroll">
+        <MudSimpleTable Dense="true" Hover="true">
+            <thead><tr><th>#</th><th>Jogador</th><th>CV</th><th>Ataques</th><th>Estrelas</th></tr></thead>
+            <tbody>
+            @foreach (var p in _war.Participants)
+            {
+                var mine = _war.Attacks.Where(a => a.AttackerTag == p.Tag).ToList();
+                <tr>
+                    <td>@p.MapPosition</td><td>@p.Name</td><td>@p.TownHall</td>
+                    <td>@p.AttacksUsed/@p.AttacksAllowed</td>
+                    <td>@(mine.Count == 0 ? "—" : string.Join(" · ", mine.Select(a => $"{a.Stars}⭐ {a.Destruction:0}%")))</td>
+                </tr>
+            }
+            </tbody>
+        </MudSimpleTable>
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+    [Parameter] public Guid Id { get; set; }
+
+    private WarDetailDto? _war;
+    private bool _loaded;
+    private string? _error;
+    private PollingLoop? _poll;
+
+    private List<WarParticipantDto> Pending =>
+        _war is null || _war.Summary.State != "InWar" ? [] : _war.Participants.Where(p => p.AttacksUsed < p.AttacksAllowed).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Load();
+        _poll = new PollingLoop(Js, TimeSpan.FromSeconds(20), async () => { await Load(); await InvokeAsync(StateHasChanged); });
+        _poll.Start();
+    }
+
+    private async Task Load()
+    {
+        var r = await Api.Get<WarDetailDto>($"/api/v1/clans/{Id}/wars/current");
+        if (r.Ok) { _war = r.Value; _error = null; } else _error = r.Error;
+        _loaded = true;
+    }
+
+    public void Dispose() => _poll?.Dispose();
+}

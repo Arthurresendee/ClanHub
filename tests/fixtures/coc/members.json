@@ -1,0 +1,4 @@
+{ "items": [
+  { "tag": "#PPP2", "name": "Líder", "role": "leader", "expLevel": 200, "trophies": 5000, "clanRank": 1, "donations": 300, "donationsReceived": 100 },
+  { "tag": "#QQQ2", "name": "Membro", "role": "member", "expLevel": 150, "trophies": 4000, "clanRank": 2, "donations": 10, "donationsReceived": 50 }
+] }

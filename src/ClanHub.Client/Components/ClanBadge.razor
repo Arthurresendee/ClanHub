@@ -1,0 +1,9 @@
+@if (!string.IsNullOrEmpty(Url))
+{
+    <img src="@Url" alt="" width="@Size" height="@Size" style="border-radius:50%;object-fit:cover" />
+}
+
+@code {
+    [Parameter] public string? Url { get; set; }
+    [Parameter] public int Size { get; set; } = 48;
+}

@@ -1,0 +1,95 @@
+@page "/app/{Ws:guid}/configuracoes"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+<PageTitle>Configurações do workspace — ClanHub</PageTitle>
+
+<div class="page" style="max-width:900px">
+    <MudText Typo="Typo.h4" GutterBottom="true">Configurações do workspace</MudText>
+    @if (!IsAdmin) { <MudAlert Severity="Severity.Warning">Só Admins e o Dono podem ver esta página.</MudAlert> }
+    else
+    {
+        <MudPaper Class="pa-4 mb-4">
+            <MudText Typo="Typo.h6" GutterBottom="true">Nome</MudText>
+            <MudStack Row="true" AlignItems="AlignItems.End">
+                <MudTextField @bind-Value="_name" Label="Nome do workspace" />
+                <MudButton OnClick="Rename" Variant="Variant.Outlined">Salvar</MudButton>
+            </MudStack>
+        </MudPaper>
+
+        <MudPaper Class="pa-4 mb-4">
+            <MudText Typo="Typo.h6" GutterBottom="true">Registro de ações</MudText>
+            @if (_audit.Count == 0) { <MudText>Nada registrado ainda.</MudText> }
+            <div class="table-scroll">
+                <MudSimpleTable Dense="true">
+                    <thead><tr><th>Quando</th><th>Ação</th><th>Detalhes</th></tr></thead>
+                    <tbody>
+                    @foreach (var a in _audit)
+                    {
+                        <tr><td>@Format.Dt(a.At)</td><td>@a.Action</td><td style="word-break:break-all">@a.Data</td></tr>
+                    }
+                    </tbody>
+                </MudSimpleTable>
+            </div>
+            @if (_next is not null) { <MudButton OnClick="MoreAudit" Class="mt-2" Size="Size.Small">Carregar mais</MudButton> }
+        </MudPaper>
+
+        @if (IsOwner)
+        {
+            <MudPaper Class="pa-4">
+                <MudText Typo="Typo.h6" Color="Color.Error" GutterBottom="true">Excluir workspace</MudText>
+                <MudText Class="mb-2">Remove o workspace e para de acompanhar todos os clãs dele.</MudText>
+                <MudButton OnClick="Delete" Variant="Variant.Outlined" Color="Color.Error">Excluir workspace</MudButton>
+            </MudPaper>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+
+    private string _name = "";
+    private List<AuditEntryDto> _audit = [];
+    private string? _next;
+
+    private string Role => Auth.Me?.Workspaces.FirstOrDefault(w => w.Id == Ws)?.Role ?? "Viewer";
+    private bool IsAdmin => Role is "Admin" or "Owner";
+    private bool IsOwner => Role == "Owner";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _name = Auth.Me?.Workspaces.FirstOrDefault(w => w.Id == Ws)?.Name ?? "";
+        if (!IsAdmin) return;
+        var r = await Api.Get<Page<AuditEntryDto>>($"/api/v1/workspaces/{Ws}/audit");
+        _audit = r.Value?.Items.ToList() ?? [];
+        _next = r.Value?.NextCursor;
+    }
+
+    private async Task MoreAudit()
+    {
+        var r = await Api.Get<Page<AuditEntryDto>>($"/api/v1/workspaces/{Ws}/audit?cursor={_next}");
+        if (!r.Ok) return;
+        _audit.AddRange(r.Value!.Items);
+        _next = r.Value.NextCursor;
+    }
+
+    private async Task Rename()
+    {
+        var r = await Api.Patch<bool>($"/api/v1/workspaces/{Ws}", new RenameWorkspaceRequest(_name));
+        Snackbar.Add(r.Ok ? "Nome atualizado." : (r.Error ?? "Erro"), r.Ok ? Severity.Success : Severity.Error);
+        if (r.Ok) await Auth.RefreshAsync();
+    }
+
+    private async Task Delete()
+    {
+        var ok = await Dialogs.ShowMessageBoxAsync("Excluir workspace", "Isto remove o workspace e todos os clãs dele. Continuar?", yesText: "Excluir", cancelText: "Cancelar");
+        if (ok != true) return;
+        var r = await Api.Delete($"/api/v1/workspaces/{Ws}");
+        if (!r.Ok) { Snackbar.Add(r.Error ?? "Erro", Severity.Error); return; }
+        await Auth.RefreshAsync();
+        Nav.NavigateTo("/app");
+    }
+}

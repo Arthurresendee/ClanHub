@@ -1,0 +1,93 @@
+@page "/app/{Ws:guid}/cla/{Id:guid}/recrutamento"
+@inject ApiClient Api
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+<PageTitle>Recrutamento — ClanHub</PageTitle>
+
+@if (_settings is { IsPublic: true, PublicSlug: not null })
+{
+    <MudAlert Severity="Severity.Success" Class="mb-3">
+        Página pública ativa: <MudLink Href="@($"/c/{_settings.PublicSlug}")" Target="_blank">@(Nav.BaseUri)c/@_settings.PublicSlug</MudLink>
+    </MudAlert>
+}
+else
+{
+    <MudAlert Severity="Severity.Info" Class="mb-3">A página pública de candidaturas está desligada. @(Ctx.IsAdmin ? "Ative em Configurações do clã." : "Peça a um Admin para ativar.")</MudAlert>
+}
+
+<MudSelect T="string" @bind-Value="_status" Label="Situação" @bind-Value:after="Load" Class="mb-2" Style="max-width:240px">
+    <MudSelectItem T="string" Value="@("Pending")">Pendentes</MudSelectItem>
+    <MudSelectItem T="string" Value="@("Approved")">Aprovadas</MudSelectItem>
+    <MudSelectItem T="string" Value="@("Rejected")">Recusadas</MudSelectItem>
+    <MudSelectItem T="string" Value="@("")">Todas</MudSelectItem>
+</MudSelect>
+
+@if (_apps is null) { <MudProgressLinear Indeterminate="true" /> }
+else if (_apps.Count == 0) { <MudText>Nenhuma candidatura.</MudText> }
+@foreach (var a in _apps ?? [])
+{
+    <MudPaper Class="pa-3 mb-2">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+            <div>
+                <MudText Typo="Typo.h6">@(a.PlayerName ?? a.PlayerTag) <MudText Typo="Typo.caption" Inline="true">@a.PlayerTag</MudText></MudText>
+                <MudText Typo="Typo.caption">@Format.Dt(a.CreatedAt) · @a.Status @(a.Contact is not null ? $"· contato: {a.Contact}" : "")</MudText>
+            </div>
+            @if (a.Status == "Pending")
+            {
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Color="Color.Success" Variant="Variant.Outlined" Size="Size.Small" OnClick='() => Decide(a, "Approved")'>Aprovar</MudButton>
+                    <MudButton Color="Color.Error" Variant="Variant.Outlined" Size="Size.Small" OnClick='() => Decide(a, "Rejected")'>Recusar</MudButton>
+                </MudStack>
+            }
+        </MudStack>
+        @if (!string.IsNullOrWhiteSpace(a.Message)) { <MudText Class="mt-1">“@a.Message”</MudText> }
+        @if (!string.IsNullOrWhiteSpace(a.PlayerSnapshotJson)) { <MudText Typo="Typo.caption">Perfil na hora da candidatura: @Snapshot(a.PlayerSnapshotJson)</MudText> }
+        @if (a.Status == "Pending")
+        {
+            <MudTextField @bind-Value="_comments[a.Id]" Label="Comentário (opcional)" Class="mt-1" />
+        }
+        else if (!string.IsNullOrWhiteSpace(a.ReviewComment)) { <MudText Typo="Typo.caption">Comentário: @a.ReviewComment</MudText> }
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+    [Parameter] public Guid Id { get; set; }
+    [CascadingParameter] public ClanContext Ctx { get; set; } = default!;
+
+    private List<ApplicationDto>? _apps;
+    private ClanSettingsDto? _settings;
+    private string _status = "Pending";
+    private readonly Dictionary<Guid, string> _comments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _settings = (await Api.Get<ClanSettingsDto>($"/api/v1/clans/{Id}/settings")).Value;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        _apps = (await Api.Get<List<ApplicationDto>>($"/api/v1/clans/{Id}/applications?status={_status}")).Value ?? [];
+        foreach (var a in _apps) _comments.TryAdd(a.Id, "");
+    }
+
+    private async Task Decide(ApplicationDto a, string status)
+    {
+        var r = await Api.Patch<ApplicationDto>($"/api/v1/applications/{a.Id}", new UpdateApplicationRequest(status, _comments.GetValueOrDefault(a.Id)));
+        if (!r.Ok) { Snackbar.Add(r.Error ?? "Erro", Severity.Error); return; }
+        await Load();
+    }
+
+    private static string Snapshot(string json)
+    {
+        try
+        {
+            using var d = System.Text.Json.JsonDocument.Parse(json);
+            var e = d.RootElement;
+            string G(string k) => e.TryGetProperty(k, out var v) && v.ValueKind != System.Text.Json.JsonValueKind.Null ? v.ToString() : "—";
+            return $"nível {G("expLevel")}, {G("trophies")} troféus, CV {G("townHall")}";
+        }
+        catch { return "—"; }
+    }
+}

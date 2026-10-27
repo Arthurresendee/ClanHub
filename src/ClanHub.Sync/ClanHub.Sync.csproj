@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\ClanHub.Infrastructure\ClanHub.Infrastructure.csproj" />
+    <ProjectReference Include="..\ClanHub.Supercell\ClanHub.Supercell.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ClanHub.UnitTests" />
+  </ItemGroup>
+</Project>

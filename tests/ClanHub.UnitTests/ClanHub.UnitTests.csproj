@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><IsPackable>false</IsPackable></PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
+    <PackageReference Include="WireMock.Net" />
+  </ItemGroup>
+  <ItemGroup><Using Include="Xunit" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ClanHub.Domain\ClanHub.Domain.csproj" />
+    <ProjectReference Include="..\..\src\ClanHub.Application\ClanHub.Application.csproj" />
+    <ProjectReference Include="..\..\src\ClanHub.Supercell\ClanHub.Supercell.csproj" />
+    <ProjectReference Include="..\..\src\ClanHub.Sync\ClanHub.Sync.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\fixtures\**\*" LinkBase="fixtures" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

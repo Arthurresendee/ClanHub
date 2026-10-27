@@ -1,0 +1,61 @@
+@page "/c/{Slug}"
+@inject ApiClient Api
+<PageTitle>@(_clan?.Name ?? "Clã") — Recrutamento</PageTitle>
+
+<div class="page" style="max-width:640px">
+    @if (_loading) { <MudProgressLinear Indeterminate="true" /> }
+    else if (_clan is null) { <MudAlert Severity="Severity.Warning">Esta página de recrutamento não existe ou está desativada.</MudAlert> }
+    else
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+            <ClanBadge Url="@_clan.BadgeUrl" Size="64" />
+            <div>
+                <MudText Typo="Typo.h4">@_clan.Name</MudText>
+                <MudText Typo="Typo.caption">@GameIds.Label(_clan.Game) · @_clan.Tag · @_clan.MemberCount membros</MudText>
+            </div>
+        </MudStack>
+        @if (!string.IsNullOrWhiteSpace(_clan.RecruitmentText)) { <MudText Class="mb-4" Style="white-space:pre-line">@_clan.RecruitmentText</MudText> }
+
+        @if (_sent)
+        {
+            <MudAlert Severity="Severity.Success">Candidatura enviada! A liderança do clã vai avaliar e entrar em contato.</MudAlert>
+        }
+        else
+        {
+            <MudText Typo="Typo.h6" GutterBottom="true">Quero entrar</MudText>
+            <MudTextField @bind-Value="_tag" Label="Sua tag de jogador (ex.: #2PP)" />
+            <MudTextField @bind-Value="_contact" Label="Contato (Discord, e-mail...) — opcional" MaxLength="200" />
+            <MudTextField @bind-Value="_message" Label="Conte um pouco sobre você — opcional" Lines="3" MaxLength="1000" />
+            @if (_error is not null) { <MudAlert Severity="Severity.Error" Class="mt-2">@_error</MudAlert> }
+            <MudButton OnClick="Submit" Disabled="_busy" Variant="Variant.Filled" Color="Color.Primary" Class="mt-3">Enviar candidatura</MudButton>
+            <MudText Typo="Typo.caption" Class="mt-2" Style="display:block">Sua tag é usada só para consultar seu perfil público no jogo e ajudar a liderança a avaliar.</MudText>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public string Slug { get; set; } = "";
+
+    private PublicClanDto? _clan;
+    private bool _loading = true, _sent, _busy;
+    private string _tag = "", _contact = "", _message = "";
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        var r = await Api.Get<PublicClanDto>($"/api/v1/public/clans/{Uri.EscapeDataString(Slug)}");
+        _clan = r.Ok ? r.Value : null;
+        _loading = false;
+    }
+
+    private async Task Submit()
+    {
+        _busy = true; _error = null;
+        var r = await Api.PostOk($"/api/v1/public/clans/{Uri.EscapeDataString(Slug)}/apply",
+            new ApplyRequest(_tag.Trim(), _message, string.IsNullOrWhiteSpace(_contact) ? null : _contact.Trim()));
+        _busy = false;
+        if (r.Ok) _sent = true;
+        else _error = r.Status == 429 ? "Muitas tentativas. Aguarde um minuto." : r.Error;
+    }
+}

@@ -1,0 +1,5 @@
+{ "items": [
+  { "result": "win", "endTime": "20251230T100000.000Z", "teamSize": 15,
+    "clan": { "tag": "#2PP", "stars": 40, "destructionPercentage": 90.1 },
+    "opponent": { "tag": "#RRR2", "name": "Rivais", "stars": 35, "destructionPercentage": 85 } }
+] }

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "api": {
+      "root": ".",
+      "entrypoint": "Dockerfile.vercel",
+      "runtime": "container"
+    }
+  },
+  "rewrites": [{ "source": "/(.*)", "service": "api" }],
+  "crons": [
+    { "path": "/internal/sync/tick", "schedule": "* * * * *" },
+    { "path": "/internal/maintenance/daily", "schedule": "0 6 * * *" }
+  ]
+}

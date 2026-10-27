@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" id="root" xmlns="">
+    <xsd:element name="root" msdata:IsDataSet="true" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+              <xsd:attribute name="xml:space" default="preserve" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="SupercellNotice" xml:space="preserve"><value>This material is unofficial and is not endorsed by Supercell. For more information see Supercell's Fan Content Policy: www.supercell.com/fan-content-policy.</value></data>
+  <data name="AppName" xml:space="preserve"><value>ClanHub</value></data>
+  <data name="NavHome" xml:space="preserve"><value>Início</value></data>
+  <data name="NavWorkspaces" xml:space="preserve"><value>Meus workspaces</value></data>
+  <data name="NavAccount" xml:space="preserve"><value>Minha conta</value></data>
+  <data name="NavLogin" xml:space="preserve"><value>Entrar</value></data>
+  <data name="NavSignup" xml:space="preserve"><value>Cadastrar</value></data>
+  <data name="NavLogout" xml:space="preserve"><value>Sair</value></data>
+  <data name="NavTeam" xml:space="preserve"><value>Equipe</value></data>
+  <data name="NavAddClan" xml:space="preserve"><value>Adicionar clã</value></data>
+  <data name="NavAdminSync" xml:space="preserve"><value>Sincronização</value></data>
+  <data name="TabOverview" xml:space="preserve"><value>Visão geral</value></data>
+  <data name="TabMembers" xml:space="preserve"><value>Membros</value></data>
+  <data name="TabActivity" xml:space="preserve"><value>Atividade</value></data>
+  <data name="TabWar" xml:space="preserve"><value>Guerra atual</value></data>
+  <data name="TabWars" xml:space="preserve"><value>Histórico de guerras</value></data>
+  <data name="TabRiverRace" xml:space="preserve"><value>Guerra de Clãs</value></data>
+  <data name="FooterLinks" xml:space="preserve"><value>Termos e Privacidade</value></data>
+</root>

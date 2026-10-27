@@ -1,0 +1,2 @@
+{ "items": [ { "battleType": "homeVillage", "attack": true, "opponentPlayerTag": "#LLL2", "stars": 2, "destructionPercentage": 76 },
+             { "battleType": "homeVillage", "attack": false, "opponentPlayerTag": "#LLL2", "stars": 0, "destructionPercentage": 10 } ] }

@@ -1,0 +1,3 @@
+{ "items": [ { "battleTime": "20260101T120000.000Z", "event": { "mode": "gemGrab", "map": "Hard Rock Mine" },
+  "battle": { "mode": "gemGrab", "type": "ranked", "result": "victory", "trophyChange": 8,
+    "teams": [ [ { "tag": "#LL22", "name": "Shelly", "brawler": { "name": "SHELLY" } }, { "tag": "#QQ92", "name": "Colt", "brawler": { "name": "COLT" } } ], [] ] } } ] }

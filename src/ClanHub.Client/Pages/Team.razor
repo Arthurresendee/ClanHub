@@ -1,0 +1,135 @@
+@page "/app/{Ws:guid}/equipe"
+@attribute [Authorize]
+@inject ApiClient Api
+@inject ApiAuthStateProvider Auth
+@inject ISnackbar Snackbar
+@inject IJSRuntime Js
+<PageTitle>Equipe — ClanHub</PageTitle>
+
+<div class="page">
+    <MudText Typo="Typo.h4" GutterBottom="true">Equipe</MudText>
+    @if (_error is not null) { <MudAlert Severity="Severity.Error" Class="mb-2">@_error</MudAlert> }
+
+    @if (_members is null) { <MudProgressLinear Indeterminate="true" /> }
+    else
+    {
+        <div class="table-scroll">
+            <MudSimpleTable Dense="true" Hover="true">
+                <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Desde</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var m in _members)
+                {
+                    <tr>
+                        <td>@m.DisplayName</td>
+                        <td>@m.Email</td>
+                        <td>
+                            @if (CanManage && m.Role != "Owner")
+                            {
+                                <MudSelect T="string" Value="@m.Role" ValueChanged="v => ChangeRole(m, v)" Dense="true" Margin="Margin.Dense">
+                                    <MudSelectItem T="string" Value="@("Admin")">Admin</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Staff")">Staff</MudSelectItem>
+                                    <MudSelectItem T="string" Value="@("Viewer")">Leitor</MudSelectItem>
+                                </MudSelect>
+                            }
+                            else { @Format.Role(m.Role) }
+                        </td>
+                        <td>@Format.Dt(m.JoinedAt)</td>
+                        <td>
+                            @if (CanManage && m.Role != "Owner")
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="() => Remove(m)" aria-label="Remover" />
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </MudSimpleTable>
+        </div>
+    }
+
+    @if (CanManage)
+    {
+        <MudText Typo="Typo.h6" Class="mt-6" GutterBottom="true">Convidar</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.End" Class="mb-2">
+            <MudTextField @bind-Value="_inviteEmail" Label="E-mail (opcional)" />
+            <MudSelect T="string" @bind-Value="_inviteRole" Label="Papel">
+                <MudSelectItem T="string" Value="@("Admin")">Admin</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Staff")">Staff</MudSelectItem>
+                <MudSelectItem T="string" Value="@("Viewer")">Leitor</MudSelectItem>
+            </MudSelect>
+            <MudButton OnClick="Invite" Variant="Variant.Filled" Color="Color.Primary">Gerar convite</MudButton>
+        </MudStack>
+        @if (_inviteUrl is not null)
+        {
+            <MudAlert Severity="Severity.Success" Class="mb-2">
+                Envie este link (válido por 7 dias, uso único): <b style="word-break:break-all">@_inviteUrl</b>
+                <MudButton OnClick="CopyLink" Size="Size.Small">Copiar</MudButton>
+            </MudAlert>
+        }
+        @if (_invites is { Count: > 0 })
+        {
+            <MudText Typo="Typo.subtitle1">Convites pendentes</MudText>
+            @foreach (var i in _invites)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center">
+                    <MudText>@(i.Email ?? "Link aberto") · @Format.Role(i.Role) · expira @Format.Dt(i.ExpiresAt)</MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="() => Cancel(i)" aria-label="Cancelar convite" />
+                </MudStack>
+            }
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Ws { get; set; }
+
+    private List<TeamMemberDto>? _members;
+    private List<InviteDto>? _invites;
+    private string? _error, _inviteUrl;
+    private string _inviteEmail = "", _inviteRole = "Staff";
+
+    private bool CanManage => Auth.Me?.Workspaces.FirstOrDefault(w => w.Id == Ws)?.Role is "Owner" or "Admin";
+
+    protected override async Task OnParametersSetAsync() => await Load();
+
+    private async Task Load()
+    {
+        var m = await Api.Get<List<TeamMemberDto>>($"/api/v1/workspaces/{Ws}/members");
+        if (!m.Ok) { _error = m.Error; return; }
+        _members = m.Value;
+        if (CanManage) _invites = (await Api.Get<List<InviteDto>>($"/api/v1/workspaces/{Ws}/invites")).Value;
+    }
+
+    private async Task ChangeRole(TeamMemberDto m, string role)
+    {
+        var r = await Api.Patch<bool>($"/api/v1/workspaces/{Ws}/members/{m.UserId}", new UpdateMemberRoleRequest(role));
+        if (!r.Ok) Snackbar.Add(r.Error ?? "Erro", Severity.Error);
+        await Load();
+    }
+
+    private async Task Remove(TeamMemberDto m)
+    {
+        var r = await Api.Delete($"/api/v1/workspaces/{Ws}/members/{m.UserId}");
+        if (!r.Ok) Snackbar.Add(r.Error ?? "Erro", Severity.Error);
+        await Load();
+    }
+
+    private async Task Invite()
+    {
+        var r = await Api.Post<CreateInviteResponse>($"/api/v1/workspaces/{Ws}/invites",
+            new CreateInviteRequest(string.IsNullOrWhiteSpace(_inviteEmail) ? null : _inviteEmail.Trim(), _inviteRole));
+        if (r.Ok) { _inviteUrl = r.Value!.Url; _inviteEmail = ""; await Load(); }
+        else Snackbar.Add(r.Error ?? "Erro", Severity.Error);
+    }
+
+    private async Task Cancel(InviteDto i)
+    {
+        await Api.Delete($"/api/v1/workspaces/{Ws}/invites/{i.Id}");
+        await Load();
+    }
+
+    private async Task CopyLink()
+    {
+        try { await Js.InvokeVoidAsync("clanhub.copy", _inviteUrl); Snackbar.Add("Link copiado.", Severity.Success); } catch { }
+    }
+}

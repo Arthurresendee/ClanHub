@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Clanhub_Ci_Passw0rd"
+        ports: ["1433:1433"]
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P Clanhub_Ci_Passw0rd -Q 'SELECT 1'"
+          --health-interval 10s --health-timeout 5s --health-retries 12
+    env:
+      # Os testes de integração e E2E criam (e apagam) um banco próprio neste servidor.
+      CLANHUB_TEST_SQL: "Server=localhost,1433;Database=master;User Id=sa;Password=Clanhub_Ci_Passw0rd;TrustServerCertificate=true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet build ClanHub.slnx -c Release
+      - name: Instalar o Chromium do Playwright (testes E2E)
+        run: pwsh tests/ClanHub.E2E/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+      - name: Testes (unitários, componentes, integração e E2E)
+        run: dotnet test ClanHub.slnx -c Release --no-build
+
+  migrate:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet tool restore
+      # Migrations compatíveis com a versão anterior do código: adicionar antes, remover depois.
+      - name: Gerar o migration bundle
+        run: dotnet ef migrations bundle --project src/ClanHub.Infrastructure --self-contained -r linux-x64 --force -o efbundle
+      - name: Aplicar migrations
+        env:
+          DB_MIGRATOR_CONNECTION: ${{ secrets.DB_MIGRATOR_CONNECTION }}
+        run: ./efbundle --connection "$DB_MIGRATOR_CONNECTION"

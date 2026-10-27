@@ -1,0 +1,5 @@
+{ "state": "inWar", "season": "2026-01",
+  "clans": [ { "tag": "#2PP", "name": "Clã Teste" }, { "tag": "#RRR2", "name": "Rivais" }, { "tag": "#UUU2", "name": "Outros" }, { "tag": "#YYY2", "name": "Mais um" } ],
+  "rounds": [
+    { "warTags": [ "#2WWW", "#2WWL", "#2WWP", "#2WWQ" ] },
+    { "warTags": [ "#0", "#0", "#0", "#0" ] } ] }
